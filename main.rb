@@ -167,7 +167,7 @@ def trans_yes_no_nd(s)
          "no" => "No",
          "nd" => "nd",
          "na" => "Not Applicable"}
-    t[s.downcase] || s
+    t[s.downcase] || s unless s.blank?
 end
 
 def add_quality_dimension_data_points_qoi(quality_interventional, study)
@@ -654,19 +654,36 @@ def insert_arm_detail_data(study, intervention)
     co_interventions = trans_yes_no_nd(intervention[-2][1])
     compliance_adherence = trans_yes_no_nd(intervention[-1][1])
     intervention_data = intervention[1..-3]
-    p intervention_data
 
     arms = Arm.find(:all, :conditions => { :study_id => study.id, :extraction_form_id => 194 })
+    arm_details = ArmDetail.find(:all, :order => "question_number",
+                                 :conditions => { :extraction_form_id => 194 })
 
     arms.each_with_index do |arm, n|
-        p arm.id
-        ArmDetailDataPoint.create(arm_detail_field_id: arm.id,
-                                  value: intervention_data[n][],
+        arm_details.each_with_index do |arm_detail, m|
+            ArmDetailDataPoint.create(arm_detail_field_id: arm_detail.id,
+                                      value: trans_yes_no_nd(intervention_data[n][m+3]),
+                                      notes: nil,
+                                      study_id: study.id,
+                                      extraction_form_id: 194,
+                                      arm_id: arm.id,
+                                     )
+        end
+        ArmDetailDataPoint.create(arm_detail_field_id: arm_details[-2].id,
+                                  value: co_interventions,
+                                  notes: nil,
+                                  study_id: study.id,
+                                  extraction_form_id: 194,
+                                  arm_id: arm.id,
+                                 )
+        ArmDetailDataPoint.create(arm_detail_field_id: arm_details[-1].id,
+                                  value: compliance_adherence,
+                                  notes: nil,
+                                  study_id: study.id,
+                                  extraction_form_id: 194,
                                   arm_id: arm.id,
                                  )
     end
-    #p co_interventions
-    #p compliance_adherence
 end
 
 def create_outcomes
@@ -783,15 +800,13 @@ if __FILE__ == $0
 
     insert_design_detail_data(study, eligibility, background)
 
-    ## Todo !!!
     # Create arms if intervention table is not empty
     unless interventions?(intervention)
         create_arms(study, intervention)
         insert_arm_detail_data(study, intervention)
     end
 
-
-
+    ## Todo !!!
     create_outcomes
     insert_outcome_detail_data
     build_results
