@@ -1,12 +1,14 @@
+## encoding: UTF-8
+
 require 'nokogiri'
 require_relative "trollop"
 
-# This program reads in an html document and extract data to be
-# inserted into a SRDR project
-#
-# Author::    Jens Jap  (mailto:jens_jap@brown.edu)
-# Copyright::
-# License::   Distributes under the same terms as Ruby
+## This program reads in an html document and extract data to be
+## inserted into a SRDR project
+##
+## Author::    Jens Jap  (mailto:jens_jap@brown.edu)
+## Copyright::
+## License::   Distributes under the same terms as Ruby
 
 def load_rails_environment
     ENV["RAILS_ENV"] = ARGV.first || ENV["RAILS_ENV"] || "development"
@@ -38,19 +40,103 @@ end
 
 # Looks for `table' tags in the document and retrieves them
 # using nokogiri parser
-# nil -> Nokogiri
-def retrieve_tables(opts)
+# file -> Nokogiri
+def parse_html_file(opts)
     f = File.open(opts[:file])
-    doc = Nokogiri::HTML(f)
-    doc.xpath('/html/body/table')
+    Nokogiri::HTML(f)
+end
+
+def get_table_data(doc)
+    tables = Array.new
+
+    table_names = ["ELIGIBILITY\nCRITERIA AND OTHER CHARACTERISTICS",
+                   "POPULATION\n(BASELINE)",
+                   "Background\nDiet",
+                   "INTERVENTION(S),\nSKIP IF OBSERVATIONAL STUDY",
+                   "LIST\nOF ALL OUTCOMES",
+                   #"Confounders:\nPlease report all confounders controlled in the analyses reported in\nthe following result section (adjusted results)",
+    ]
+
+    table_names.each do |name|
+        table = doc.xpath("/html/body/p//*[contains(text(), '#{name}')]/ancestor::p[1]/following-sibling::table[1]")
+        table = split_table_data(table)
+        tables << table
+    end
+
+    # 2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES (e.g. OR, RR, %death)
+    table = doc.xpath("/html/body/p//*[contains(text(), 'DICHOTOMOUS OUTCOMES')]")[0]
+    table = table.xpath("./ancestor::p[1]/following-sibling::table[1]")
+    table = split_table_data(table)
+    tables << (table)
+
+    # 2 ARMS/GROUPS: CONTINOUS OUTCOMES (e.g. BMD, BP)
+    table = doc.xpath("/html/body/p//*[contains(text(), 'CONTINOUS OUTCOMES')]")[0]
+    table = table.xpath("./ancestor::p[1]/following-sibling::table[1]")
+    table = split_table_data(table)
+    tables << (table)
+
+    # ≥2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES (e.g. OR, RR, %death)
+    table = doc.xpath("/html/body/p//*[contains(text(), 'DICHOTOMOUS OUTCOMES')]")[1]
+    table = table.xpath("./ancestor::p[1]/following-sibling::table[1]")
+    table = split_table_data(table)
+    tables << (table)
+
+    # ≥2 ARMS/GROUPS: CONTINOUS OUTCOMES (e.g. BMD, BP)
+    table = doc.xpath("/html/body/p//*[contains(text(), 'CONTINOUS OUTCOMES')]")[1]
+    table = table.xpath("./ancestor::p[1]/following-sibling::table[1]")
+    table = split_table_data(table)
+    tables << (table)
+
+    # "MEAN\nDATA. THIS SHOULD ONLY APPLY TO CASE-COHORT STUDIES"
+    table = doc.xpath("/html/body/p//*[contains(text(), 'MEAN\nDATA. THIS SHOULD ONLY APPLY TO CASE-COHORT STUDIES')]/ancestor::p[1]/following-sibling::table[1]")
+    table = split_table_data(table)
+    tables << table
+
+    # "OTHER RESULTS"
+    table = doc.xpath("/html/body/p//*[contains(text(), 'OTHER\nRESULTS')]/ancestor::p[1]/following-sibling::table[1]")
+    table = split_table_data(table)
+    tables << table
+
+    # "QUALITY of INTERVENTIONAL STUDIES"
+    table = doc.xpath("/html/body/p//*[contains(text(), 'QUALITY\nof INTERVENTIONAL STUDIES')]/ancestor::p[1]/following-sibling::table[1]")
+    table = split_table_data(table)
+    tables << table
+
+    # "QUALITY of COHORT OR NESTED CASE-CONTROL STUDIES"
+    table = doc.xpath("/html/body/p//*[contains(text(), 'QUALITY\nof COHORT OR NESTED CASE-CONTROL STUDIES')]/ancestor::p[1]/following-sibling::table[1]")
+    table = split_table_data(table)
+    tables << table
+
+    # Comments
+    table = doc.xpath('/html/body/table//td//*[contains(text(), "Comments")]')[0].xpath('./ancestor::table[1]')
+    table = split_table_data(table)
+    tables << table
+
+    # Comments for results
+    table = doc.xpath('/html/body/table//td//*[contains(text(), "Comments")]')[1].xpath('./ancestor::table[1]')
+    table = split_table_data(table)
+    tables << table
+
+    # Confounders
+    table = doc.xpath('/html/body//*[contains(text(), "----Confounders:")]/ancestor::p[1]/following-sibling::table[1]')
+    table = split_table_data(table)
+    #p table
+    #gets
+    #table.each do |t|
+    #    p t
+    #end
+    tables << table
+
+
+    return tables
 end
 
 # Find table row elements out of Nokogiri type object and packages them up
 # into an array
 # Nokogiri -> Array
-def get_table_data(table)
+def split_table_data(table)
     temp = Array.new
-    rows = table.xpath('./tr')
+    rows = table.xpath('.//tr')
     rows.each do |row|
         temp << convert_to_array(row)
     end
@@ -686,10 +772,114 @@ def insert_arm_detail_data(study, intervention)
     end
 end
 
-def create_outcomes
+# Inserts baselineline characteristics. We are placing all values into All Arms (Total)
+def insert_baseline_characteristics(study, population)
+    baseline_characteristics = BaselineCharacteristic.find(:all,
+                                                           :order => "question_number",
+                                                           :conditions => { :extraction_form_id => 194 })
+    baseline_characteristics.each_with_index do |baseline, n|
+        BaselineCharacteristicDataPoint.create(
+            baseline_characteristic_field_id: baseline.id,
+            value: trans_yes_no_nd(population[1][n+3]),
+            notes: nil,
+            study_id: study.id,
+            extraction_form_id: 194,
+            arm_id: 0,
+            subquestion_value: nil,
+            row_field_id: 0,
+            column_field_id: 0,
+            outcome_id: 0,
+            diagnostic_test_id: 0
+        )
+    end
 end
 
-def insert_outcome_detail_data
+# Attempts to find all outcomes for this study and create an entry in `outcomes' table
+def create_outcomes(study, outcomes)
+    outcomes[1..-1].each_with_index do |outcome|
+        unless outcome[2].blank?
+            Outcome.create(
+                study_id: study.id,
+                title: outcome[3],
+                is_primary: 1,
+                units: "",
+                description: outcome[2],
+                notes: "",
+                outcome_type: "Categorical",
+                extraction_form_id: 194
+            )
+        end
+    end
+end
+
+def insert_outcome_detail_data(study, outcomes_table, comments)
+    outcomes = Outcome.find(:all, :order => "id",
+                            :conditions => { study_id: study.id, extraction_form_id: 194 })
+    outcome_details = OutcomeDetail.find(:all, :order => "id",
+                                         :conditions => { extraction_form_id: 194,
+                                                          is_matrix: 0 })
+    outcomes.each_with_index do |outcome, n|
+        outcome_details.each_with_index do |outcome_detail, m|
+            _value = trans_yes_no_nd(outcomes_table[n+1][m+2])
+            if outcome_detail[:question] == "Comments"
+                _value = comments[1][2]
+            end
+            OutcomeDetailDataPoint.create(
+                outcome_detail_field_id: outcome_detail.id,
+                value: _value,#trans_yes_no_nd(outcomes_table[n+1][m+2]),
+                notes: nil,
+                study_id: study.id,
+                extraction_form_id: 194,
+                subquestion_value: nil,
+                row_field_id: 0,
+                column_field_id: 0,
+                arm_id: 0,
+                outcome_id: outcome.id
+            )
+        end
+    end
+end
+
+def insert_confounders_info(study, confounders)
+    confounders_row1 = confounders[1]
+    confounders[1] = confounders_row1[2..-1]
+    #confounders.each do |c|
+    #    p c
+    #end
+    #gets
+    outcomes = Outcome.find(:all, :order => "id", :conditions => { study_id: study.id, extraction_form_id: 194 })
+    outcome_details = OutcomeDetail.find(:all, :order => "question_number",
+                                         :conditions => { extraction_form_id: 194,
+                                                          is_matrix: 1 })
+    outcomes.each do |outcome|
+        outcome_details.each do |outcome_detail|
+            outcome_detail_field_rows    = OutcomeDetailField.find(:all, :order => "row_number",
+                                                                   :conditions => { outcome_detail_id: outcome_detail.id,
+                                                                                    column_number: 0 })
+            outcome_detail_field_columns = OutcomeDetailField.find(:all, :order => "column_number",
+                                                                   :conditions => { outcome_detail_id: outcome_detail.id,
+                                                                                    row_number: 0 })
+
+            outcome_detail_field_rows.each_with_index do |outcome_detail_field_row, m|
+                outcome_detail_field_columns.each_with_index do |outcome_detail_field_column, n|
+                    #p confounders[m+1][n+1]
+                    #gets
+                    OutcomeDetailDataPoint.create(
+                        outcome_detail_field_id: outcome_detail.id,
+                        value: trans_yes_no_nd(confounders[m+1][n+1]),
+                        notes: nil,
+                        study_id: study.id,
+                        extraction_form_id: 194,
+                        subquestion_value: nil,
+                        row_field_id: outcome_detail_field_row.id,
+                        column_field_id: outcome_detail_field_column.id,
+                        arm_id: 0,
+                        outcome_id: outcome.id
+                    )
+                end
+            end
+        end
+    end
 end
 
 def build_results
@@ -700,6 +890,7 @@ end
 
 
 
+
 if __FILE__ == $0
     key_question_id_list = [356, 357, 358, 359, 360]
     table_array = Array.new
@@ -707,28 +898,29 @@ if __FILE__ == $0
 
     validate_arg_list(opts)
 
-    tables = retrieve_tables(opts)
-    tables.each do |table|
-        table_data = get_table_data(table)
-        table_array << table_data
-    end
+    ## Load rails environment so we can access database object as well as use rails
+    ## specific methods like blank?
+    load_rails_environment
+
+    doc = parse_html_file(opts)
+    table_array = get_table_data(doc)
 
     eligibility                  = table_array[0]  # ELIGIBILITY CRITERIA AND OTHER CHARACTERISTICS
     population                   = table_array[1]  # POPULATION (BASELINE)
     background                   = table_array[2]  # Background Diet
     intervention                 = table_array[3]  # INTERVENTION(S), SKIP IF OBSERVATIONAL STUDY
     outcomes                     = table_array[4]  # LIST OF ALL OUTCOMES
-    comments                     = table_array[5]  # Comments
-    confounders                  = table_array[6]  # Confounders
-    two_dichotomous              = table_array[7]  # 2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
-    two_continuous               = table_array[8]  # 2 ARMS/GROUPS: CONTINUOUS OUTCOMES
-    more_than_two_dichotomous    = table_array[9]  # ≥2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
-    more_than_two_continuous     = table_array[10]  # ≥2 ARMS/GROUPS: CONTINUOUS OUTCOMES
-    mean                         = table_array[11]  # MEAN DATA
-    other_results                = table_array[12]  # OTHER RESULTS
-    comments_results             = table_array[13]  # Comments for Results
-    quality_interventional       = table_array[14]  # QUALITY of INTERVENTIONAL STUDIES
-    quality_case_control_studies = table_array[15]  # QUALITY of COHORT OR NESTED CASE-CONTROL STUDIES
+    two_dichotomous              = table_array[5]  # 2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
+    two_continuous               = table_array[6]  # 2 ARMS/GROUPS: CONTINUOUS OUTCOMES
+    more_than_two_dichotomous    = table_array[7]  # ≥2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
+    more_than_two_continuous     = table_array[8]  # ≥2 ARMS/GROUPS: CONTINUOUS OUTCOMES
+    mean                         = table_array[9]  # MEAN DATA
+    other_results                = table_array[10]  # OTHER RESULTS
+    quality_interventional       = table_array[11]  # QUALITY of INTERVENTIONAL STUDIES
+    quality_case_control_studies = table_array[12]  # QUALITY of COHORT OR NESTED CASE-CONTROL STUDIES
+    comments                     = table_array[13]  # Comments
+    comments_results             = table_array[14]  # Comments for Results
+    confounders                  = table_array[15]  # Confounders
 
     #p eligibility
     #p population
@@ -747,35 +939,31 @@ if __FILE__ == $0
     #p quality_interventional
     #p quality_case_control_studies
 
-    # Load rails environment so we can access database object as well as use rails
-    # specific methods like blank?
-    load_rails_environment
-
-    # Each study for this project has the pubmed ID recorded in almost every table under the
-    # `UI' heading. For the sake of simplicity and consistency we will retrieve the pmid from the
-    # `ELIGIBILITY CRITERIA AND OTHER CHARACTERISTICS' table
+    ## Each study for this project has the pubmed ID recorded in almost every table under the
+    ## `UI' heading. For the sake of simplicity and consistency we will retrieve the pmid from the
+    ## `ELIGIBILITY CRITERIA AND OTHER CHARACTERISTICS' table
     pmid = retrieve_pmid_from_eligibility_table(eligibility)
     if pmid.blank?
         puts "*** ERROR ***"
         puts "No UI value found"
         gets
     else
-        # Study.create_for_pmids expects pmids to be an array, so we wrap pmid
+        ## Study.create_for_pmids expects pmids to be an array, so we wrap pmid
         pmids << pmid
     end
 
-    # Insert Publication data
+    ## Insert Publication data
     kq_hash = {kq: 355}
     Study.create_for_pmids(pmids, key_questions=kq_hash, project_id=135, extraction_form_id=193, user_id=1)
 
-    # Find the study that was created by Study.create_for_pmids
+    ## Find the study that was created by Study.create_for_pmids
     study_id = PrimaryPublication.last(conditions: { pmid: pmid }).study_id
     study = Study.find_by_id(study_id)
 
-    # Check if this study has QUALITY of INTERVENTIONAL STUDIES
-    # key_question_id: 361
+    ## Check if this study has QUALITY of INTERVENTIONAL STUDIES
+    ## key_question_id: 361
     if quality_of_interventional_studies?(quality_interventional)
-        #puts "QUALITY of INTERVENTIONAL STUDIES found"
+        ##puts "QUALITY of INTERVENTIONAL STUDIES found"
         add_study_to_key_questions_association_qoi(study)
         add_quality_dimension_data_points_qoi(quality_interventional, study)
         key_question_id_list << 361
@@ -783,7 +971,7 @@ if __FILE__ == $0
         #puts "No QUALITY of INTERVENTIONAL STUDIES found"
     end
 
-    # key_question_id: 362
+    ## key_question_id: 362
     if quality_of_cohort_or_nested_case_control_studies?(quality_case_control_studies)
         #puts "QUALITY of COHORT OR NESTED CASE-CONTROL STUDIES found"
         add_study_to_key_questions_association_qoc(study)
@@ -795,20 +983,23 @@ if __FILE__ == $0
 
     add_study_to_key_questions_association(key_question_id_list, study)
 
-    # This is taken care of by Study.create_for_pmids
+    ## This is taken care of by Study.create_for_pmids
     #add_study_to_extraction_form_association(study)
 
     insert_design_detail_data(study, eligibility, background)
 
-    # Create arms if intervention table is not empty
+    ## Create arms if intervention table is not empty
     unless interventions?(intervention)
         create_arms(study, intervention)
         insert_arm_detail_data(study, intervention)
     end
 
-    ## Todo !!!
-    create_outcomes
-    insert_outcome_detail_data
-    build_results
+    insert_baseline_characteristics(study, population)
+    create_outcomes(study, outcomes)
+    insert_outcome_detail_data(study, outcomes, comments)
+
+    ### Todo !!!
+    insert_confounders_info(study, confounders)
+    #build_results
     #insert_adverse_events
 end
