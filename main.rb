@@ -49,43 +49,57 @@ end
 def get_table_data(doc)
     tables = Array.new
 
-    table_names = ["ELIGIBILITY\nCRITERIA AND OTHER CHARACTERISTICS",
-                   "POPULATION\n(BASELINE)",
+    # ELIGIBILITY CRITERIA AND OTHER CHARACTERISTICS
+    table = doc.xpath("/html/body/p//*[contains(text(), 'ELIGIBILITY\nCRITERIA AND OTHER CHARACTERISTICS')]")[0]
+    if table.nil?
+        table = doc.xpath("//html/body//*[contains(text(), 'ELIGIBILITY')]/following-sibling::table[1]")
+    else
+        table = table.xpath("./ancestor::p[1]/following-sibling::table[1]")
+    end
+    table = split_table_data(table)
+    tables << (table)
+
+    table_names = ["POPULATION\n(BASELINE)",
                    "Background\nDiet",
                    "INTERVENTION(S),\nSKIP IF OBSERVATIONAL STUDY",
                    "LIST\nOF ALL OUTCOMES",
-                   #"Confounders:\nPlease report all confounders controlled in the analyses reported in\nthe following result section (adjusted results)",
     ]
+    #table_names = ["ELIGIBILITY",
+    #               "POPULATION",
+    #               "Background",
+    #               "INTERVENTION(S)",
+    #               "LIST",
+    #]
 
     table_names.each do |name|
-        table = doc.xpath("/html/body/p//*[contains(text(), '#{name}')]/ancestor::p[1]/following-sibling::table[1]")
+        table = doc.xpath("/html/body//*[contains(text(), '#{name}')]/ancestor::p[1]/following-sibling::table[1]")
         table = split_table_data(table)
         tables << table
     end
 
-    # 2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES (e.g. OR, RR, %death)
-    table = doc.xpath("/html/body/p//*[contains(text(), 'DICHOTOMOUS OUTCOMES')]")[0]
-    table = table.xpath("./ancestor::p[1]/following-sibling::table[1]")
-    table = split_table_data(table)
-    tables << (table)
+    ## 2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES (e.g. OR, RR, %death)
+    #table = doc.xpath("/html/body/p//*[contains(text(), 'DICHOTOMOUS OUTCOMES')]")[0]
+    #table = table.xpath("./ancestor::p[1]/following-sibling::table[1]")
+    #table = split_table_data(table)
+    #tables << (table)
 
-    # 2 ARMS/GROUPS: CONTINOUS OUTCOMES (e.g. BMD, BP)
-    table = doc.xpath("/html/body/p//*[contains(text(), 'CONTINOUS OUTCOMES')]")[0]
-    table = table.xpath("./ancestor::p[1]/following-sibling::table[1]")
-    table = split_table_data(table)
-    tables << (table)
+    ## 2 ARMS/GROUPS: CONTINOUS OUTCOMES (e.g. BMD, BP)
+    #table = doc.xpath("/html/body/p//*[contains(text(), 'CONTINOUS OUTCOMES')]")
+    #table = table.xpath("./ancestor::p[1]/following-sibling::table[1]")
+    #table = split_table_data(table)
+    #tables << (table)
 
-    # ≥2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES (e.g. OR, RR, %death)
-    table = doc.xpath("/html/body/p//*[contains(text(), 'DICHOTOMOUS OUTCOMES')]")[1]
-    table = table.xpath("./ancestor::p[1]/following-sibling::table[1]")
-    table = split_table_data(table)
-    tables << (table)
+    ## ≥2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES (e.g. OR, RR, %death)
+    #table = doc.xpath("/html/body/p//*[contains(text(), 'DICHOTOMOUS OUTCOMES')]")[1]
+    #table = table.xpath("./ancestor::p[1]/following-sibling::table[1]")
+    #table = split_table_data(table)
+    #tables << (table)
 
-    # ≥2 ARMS/GROUPS: CONTINOUS OUTCOMES (e.g. BMD, BP)
-    table = doc.xpath("/html/body/p//*[contains(text(), 'CONTINOUS OUTCOMES')]")[1]
-    table = table.xpath("./ancestor::p[1]/following-sibling::table[1]")
-    table = split_table_data(table)
-    tables << (table)
+    ## ≥2 ARMS/GROUPS: CONTINOUS OUTCOMES (e.g. BMD, BP)
+    #table = doc.xpath("/html/body/p//*[contains(text(), 'CONTINOUS OUTCOMES')]")[1]
+    #table = table.xpath("./ancestor::p[1]/following-sibling::table[1]")
+    #table = split_table_data(table)
+    #tables << (table)
 
     # "MEAN\nDATA. THIS SHOULD ONLY APPLY TO CASE-COHORT STUDIES"
     table = doc.xpath("/html/body/p//*[contains(text(), 'MEAN\nDATA. THIS SHOULD ONLY APPLY TO CASE-COHORT STUDIES')]/ancestor::p[1]/following-sibling::table[1]")
@@ -247,6 +261,7 @@ end
 
 # Helper to translate short answers to full length
 def trans_yes_no_nd(s)
+    s = "nd" if s.blank?
     t = {"y" => "Yes",
          "yes" => "Yes",
          "n" => "No",
@@ -798,15 +813,20 @@ end
 def create_outcomes(study, outcomes)
     outcomes[1..-1].each_with_index do |outcome|
         unless outcome[2].blank?
-            Outcome.create(
+            o = Outcome.create(
                 study_id: study.id,
                 title: outcome[3],
                 is_primary: 1,
                 units: "",
                 description: outcome[2],
                 notes: "",
-                outcome_type: "Categorical",
+                outcome_type: "Continuous",
                 extraction_form_id: 194
+            )
+            OutcomeTimepoint.create(
+                outcome_id: o.id,
+                number: "N/A",
+                time_unit: "years"
             )
         end
     end
@@ -843,10 +863,6 @@ end
 def insert_confounders_info(study, confounders)
     confounders_row1 = confounders[1]
     confounders[1] = confounders_row1[2..-1]
-    #confounders.each do |c|
-    #    p c
-    #end
-    #gets
     outcomes = Outcome.find(:all, :order => "id", :conditions => { study_id: study.id, extraction_form_id: 194 })
     outcome_details = OutcomeDetail.find(:all, :order => "question_number",
                                          :conditions => { extraction_form_id: 194,
@@ -862,8 +878,6 @@ def insert_confounders_info(study, confounders)
 
             outcome_detail_field_rows.each_with_index do |outcome_detail_field_row, m|
                 outcome_detail_field_columns.each_with_index do |outcome_detail_field_column, n|
-                    #p confounders[m+1][n+1]
-                    #gets
                     OutcomeDetailDataPoint.create(
                         outcome_detail_field_id: outcome_detail.id,
                         value: trans_yes_no_nd(confounders[m+1][n+1]),
@@ -882,12 +896,979 @@ def insert_confounders_info(study, confounders)
     end
 end
 
-def build_results
+def build_results(study, doc)
+    main_more_than_two_continuous, main_exactly_two_continuous, main_more_than_two_dichotomous, main_exactly_two_dichotomous,
+        sub_more_than_two_continuous, sub_exactly_two_continuous, sub_more_than_two_dichotomous, sub_exactly_two_dichotomous = split_results_tables_into_groups(doc)
+
+    #main_more_than_two_continuous.each do |table|
+    #    table.each do |row|
+    #        p row
+    #    end
+    #end
+
+#o = Outcome.create(
+#    study_id: study.id,
+#    title: outcome[3],
+#    is_primary: 1,
+#    units: "",
+#    description: outcome[2],
+#    notes: "",
+#    outcome_type: "Continuous",
+#    extraction_form_id: 194
+#)
+#OutcomeTimepoint.create(
+#    outcome_id: o.id,
+#    number: "N/A",
+#    time_unit: "years"
+#)
+    #main_exactly_two_continuous.each do |table|
+    #    table.each do |row|
+    #        p row
+    #    end
+    #end
+
+    main_more_than_two_dichotomous.each do |table|
+        table = table[1..-1]
+        unless table.blank?
+            table.each do |row|
+                p row
+                arm = Arm.find(:first, :conditions =>
+                               ["study_id=? AND title LIKE ? AND extraction_form_id=194", "#{study.id}", "%#{row[3]}%"])
+                if arm.blank?
+                    arm = Arm.create(
+                        study_id: study.id,
+                        title: row[3],
+                        description: "",
+                        display_number: Arm.find(:all, :conditions => { study_id: study.id,
+                                                                        extraction_form_id: 194 }),
+                        extraction_form_id: 194,
+                        is_suggested_by_admin: 0,
+                        note: nil,
+                        efarm_id: nil,
+                        default_num_enrolled: nil,
+                        is_intention_to_treat: 1
+                    )
+                end
+                unless row[2].blank?
+                    o = Outcome.create(
+                        study_id: study.id,
+                        title: row[2],
+                        is_primary: 1,
+                        units: "",
+                        description: row[3],
+                        notes: "",
+                        outcome_type: "Categorical",
+                        extraction_form_id: 194
+                    )
+                    t = OutcomeTimepoint.create(
+                        outcome_id: o.id,
+                        number: "N/A",
+                        time_unit: "N/A"
+                    )
+                    s = OutcomeSubgroup.create(
+                        outcome_id: o.id,
+                        title: "All Participants",
+                        description: "All participants involved in the study (Default)"
+                    )
+                    outcome_data_entry = OutcomeDataEntry.create(
+                        outcome_id: o.id,
+                        extraction_form_id: 194,
+                        timepoint_id: t.id,
+                        study_id: study.id,
+                        display_number: OutcomeDataEntry.find(:all, :conditions => { outcome_id: o.id,
+                                                                                     extraction_form_id: 194,
+                                                                                     timepoint_id: t.id,
+                                                                                     study_id: study.id,
+                                                                                     subgroup_id: s.id}).length + 1,
+                        subgroup_id: s.id
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Mean Vit D level/dose',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[4]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Mean Ca level/dose',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[5]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'No. of Cases',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[6]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'No. of Non-cases',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[7]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Crude or Adjusted analysis?',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[8]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Outcome Metric (e.g. OR, RR, HR, %)',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[9]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Outcome effect size',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[10]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'CI',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[11]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                else
+                    o = Outcome.find(:last, :conditions => {
+                        study_id: study.id,
+                        outcome_type: "Categorical",
+                        extraction_form_id: 194
+                    })
+                    t = OutcomeTimepoint.find(:last, :conditions => {
+                        outcome_id: o.id,
+                        number: "N/A",
+                        time_unit: "N/A"
+                    })
+                    s = OutcomeSubgroup.find(:last, :conditions => {
+                        outcome_id: o.id,
+                        title: "All Participants",
+                        description: "All participants involved in the study (Default)"
+                    })
+                    outcome_data_entry = OutcomeDataEntry.find(:last, :conditions => {
+                        outcome_id: o.id,
+                        extraction_form_id: 194,
+                        timepoint_id: t.id,
+                        study_id: study.id,
+                        subgroup_id: s.id
+                    })
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Mean Vit D level/dose',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'Mean Vit D level/dose',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[4]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Mean Ca level/dose',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'Mean Ca level/dose',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[5]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'No. of Cases',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'No. of Cases',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[6]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'No. of Non-cases',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'No. of Non-cases',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[7]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Crude or Adjusted analysis?',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'Crude or Adjusted analysis?',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[8]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Outcome Metric (e.g. OR, RR, HR, %)',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'Outcome Metric (e.g. OR, RR, HR, %)',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[9]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Outcome effect size',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'Outcome effect size',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[10]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'CI',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'CI',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[11]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'P for trend***',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'CI',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[13]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                end
+            end
+        end
+    end
+
+    #main_exactly_two_dichotomous.each do |table|
+    #    table.each do |row|
+    #        p row
+    #    end
+    #end
+
+    #sub_more_than_two_continuous.each do |table|
+    #    table.each do |row|
+    #        p row
+    #    end
+    #end
+
+    #sub_exactly_two_continuous.each do |table|
+    #    table.each do |row|
+    #        p row
+    #    end
+    #end
+
+    sub_more_than_two_dichotomous.each do |table|
+        table = table[1..-1]
+        unless table.blank?
+            table.each do |row|
+                p row
+                arm = Arm.find(:first, :conditions =>
+                               ["study_id=? AND title LIKE ? AND extraction_form_id=194", "#{study.id}", "%#{row[3]}%"])
+                if arm.blank?
+                    arm = Arm.create(
+                        study_id: study.id,
+                        title: row[3],
+                        description: "",
+                        display_number: Arm.find(:all, :conditions => { study_id: study.id,
+                                                                        extraction_form_id: 194 }),
+                        extraction_form_id: 194,
+                        is_suggested_by_admin: 0,
+                        note: nil,
+                        efarm_id: nil,
+                        default_num_enrolled: nil,
+                        is_intention_to_treat: 1
+                    )
+                end
+                unless row[2].blank?
+                    _outcomes = Outcome.find(:all, :conditions => {
+                        study_id: study.id,
+                        extraction_form_id: 194
+                    })
+                    _outcomes.each do |out|
+                        if row[2].downcase.contains?(out.title)
+                            o = Outcome.find(:first, :conditions => {
+                                study_id: study.id,
+                                title: out.title,
+                                is_primary: 1,
+                                outcome_type: "Categorical",
+                                extraction_form_id: 194
+                            })
+                            s = OutcomeSubgroup.create(
+                                outcome_id: o.id,
+                                title: row[2],
+                                description: "All participants involved in the study (Default)"
+                            )
+                            break
+                        end
+                    end
+                    if o.blank?
+                        o = Outcome.create(
+                            study_id: study.id,
+                            title: row[2],
+                            is_primary: 1,
+                            units: "",
+                            description: row[3],
+                            notes: "",
+                            outcome_type: "Categorical",
+                            extraction_form_id: 194
+                        )
+                        s = OutcomeSubgroup.create(
+                            outcome_id: o.id,
+                            title: row[2],
+                            description: "All participants involved in the study (Default)"
+                        )
+                    end
+                    t = OutcomeTimepoint.find(:first, :conditions => {
+                        outcome_id: o.id,
+                        number: "N/A",
+                        time_unit: "N/A"
+                    })
+                    outcome_data_entry = OutcomeDataEntry.create(
+                        outcome_id: o.id,
+                        extraction_form_id: 194,
+                        timepoint_id: t.id,
+                        study_id: study.id,
+                        display_number: OutcomeDataEntry.find(:all, :conditions => { outcome_id: o.id,
+                                                                                     extraction_form_id: 194,
+                                                                                     timepoint_id: t.id,
+                                                                                     study_id: study.id,
+                                                                                     subgroup_id: s.id}).length + 1,
+                        subgroup_id: s.id
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Mean Vit D level/dose',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[4]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Mean Ca level/dose',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[5]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'No. of Cases',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[6]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'No. of Non-cases',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[7]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Crude or Adjusted analysis?',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[8]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Outcome Metric (e.g. OR, RR, HR, %)',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[9]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Outcome effect size',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[10]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.create(
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'CI',
+                        description: 'Enter a Description Here',
+                        unit: nil,
+                        note: nil,
+                        measure_type: 0
+                    )
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[11]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                else
+                    o = Outcome.find(:last, :conditions => {
+                        study_id: study.id,
+                        outcome_type: "Categorical",
+                        extraction_form_id: 194
+                    })
+                    t = OutcomeTimepoint.find(:last, :conditions => {
+                        outcome_id: o.id,
+                        number: "N/A",
+                        time_unit: "N/A"
+                    })
+                    s = OutcomeSubgroup.find(:last, :conditions => {
+                        outcome_id: o.id,
+                        title: "All Participants",
+                        description: "All participants involved in the study (Default)"
+                    })
+                    outcome_data_entry = OutcomeDataEntry.find(:last, :conditions => {
+                        outcome_id: o.id,
+                        extraction_form_id: 194,
+                        timepoint_id: t.id,
+                        study_id: study.id,
+                        subgroup_id: s.id
+                    })
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Mean Vit D level/dose',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'Mean Vit D level/dose',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[4]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Mean Ca level/dose',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'Mean Ca level/dose',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[5]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'No. of Cases',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'No. of Cases',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[6]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'No. of Non-cases',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'No. of Non-cases',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[7]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Crude or Adjusted analysis?',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'Crude or Adjusted analysis?',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[8]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Outcome Metric (e.g. OR, RR, HR, %)',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'Outcome Metric (e.g. OR, RR, HR, %)',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[9]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'Outcome effect size',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'Outcome effect size',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[10]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'CI',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'CI',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[11]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                    om = OutcomeMeasure.find(:first, :conditions => {
+                        outcome_data_entry_id: outcome_data_entry.id,
+                        title: 'P for trend***',
+                    })
+                    #om = OutcomeMeasure.create(
+                    #    outcome_data_entry_id: outcome_data_entry.id,
+                    #    title: 'CI',
+                    #    description: 'Enter a Description Here',
+                    #    unit: nil,
+                    #    note: nil,
+                    #    measure_type: 0
+                    #)
+                    OutcomeDataPoint.create(
+                        outcome_measure_id: om.id,
+                        value: trans_yes_no_nd(row[13]),
+                        footnote: nil,
+                        is_calculated: 0,
+                        arm_id: arm.id,
+                        footnote_number: 0
+                    )
+                end
+            end
+        end
+    end
+
+    #sub_exactly_two_dichotomous.each do |table|
+    #    table.each do |row|
+    #        p row
+    #    end
+    #end
+
+    #[main_more_than_two_continuous, main_exactly_two_continuous, main_more_than_two_dichotomous, main_exactly_two_dichotomous,
+    #    sub_more_than_two_continuous, sub_exactly_two_continuous, sub_more_than_two_dichotomous, sub_exactly_two_dichotomous].each do |type|
+    #    type.each do |table|
+    #        table.each do |row|
+    #            p row
+    #        end
+    #    end
+    #    p "===================================================================================================="
+    #    p "===================================================================================================="
+    #    gets
+    #end
+end
+
+## Splits up all the different kinds of result tables
+## NOKOGIRI -> [[[ARRAY][ARRAY]..[ARRAY]]]
+def split_results_tables_into_groups(doc)
+    main_exactly_two_continuous = Array.new
+    main_exactly_two_dichotomous = Array.new
+    main_more_than_two_continuous = Array.new
+    main_more_than_two_dichotomous = Array.new
+    sub_exactly_two_continuous = Array.new
+    sub_exactly_two_dichotomous = Array.new
+    sub_more_than_two_continuous = Array.new
+    sub_more_than_two_dichotomous = Array.new
+
+    temp_main_cont = Array.new
+    temp_main_dich = Array.new
+    temp_sub_cont = Array.new
+    temp_sub_dich = Array.new
+
+    border = doc.xpath("//*[text()[contains(., '-----Subgroup\nAnalyses')]]")
+
+    cont_top = border.xpath("./preceding::*[contains(text(), 'CONTINOUS')]")
+    cont_top.each do |ct_noko|
+        temp = ct_noko.xpath("./following::table[1]")
+        temp = split_table_data(temp)
+        temp_main_cont << temp
+    end
+
+    dich_top = border.xpath("./preceding::*[contains(text(), 'DICHOTOMOUS')]")
+    dich_top.each do |dt_noko|
+        temp = dt_noko.xpath("./following::table[1]")
+        temp = split_table_data(temp)
+        temp_main_dich << temp
+    end
+
+    cont_bottom = border.xpath("./following::*[contains(text(), 'CONTINOUS')]")
+    cont_bottom.each do |cb_noko|
+        temp = cb_noko.xpath("./following::table[1]")
+        temp = split_table_data(temp)
+        temp_sub_cont << temp
+    end
+
+    dich_bottom = border.xpath("./following::*[contains(text(), 'DICHOTOMOUS')]")
+    dich_bottom.each do |db_noko|
+        temp = db_noko.xpath("./following::table[1]")
+        temp = split_table_data(temp)
+        temp_sub_dich << temp
+    end
+
+    temp_main_cont.each do |t|
+        if t[0][5].downcase.include?('crude')
+            main_more_than_two_continuous << t
+        else
+            main_exactly_two_continuous << t
+        end
+    end
+
+    temp_main_dich.each do |t|
+        if t[0][3].downcase.include?('tirtiles') or t[0][3].downcase.include?('tertiles')
+            main_more_than_two_dichotomous << t
+        else
+            main_exactly_two_dichotomous << t
+        end
+    end
+
+    temp_sub_cont.each do |t|
+        if t[0][5].downcase.include?('crude')
+            sub_more_than_two_continuous << t
+        else
+            sub_exactly_two_continuous << t
+        end
+    end
+
+    temp_sub_dich.each do |t|
+        if t[0][3].downcase.include?('tirtiles')
+            sub_more_than_two_dichotomous << t
+        else
+            sub_exactly_two_dichotomous << t
+        end
+    end
+
+    return main_more_than_two_continuous, main_exactly_two_continuous, main_more_than_two_dichotomous, main_exactly_two_dichotomous,
+        sub_more_than_two_continuous, sub_exactly_two_continuous, sub_more_than_two_dichotomous, sub_exactly_two_dichotomous
+end
+
+def build_other_results(study, doc)
 end
 
 def insert_adverse_events
 end
 
+def create_single_arm_for_all_participants(study)
+    Arm.create(
+        study_id: study.id,
+        title: "All Participants",
+        description: "",
+        display_number: 1,
+        extraction_form_id: 194,
+        is_suggested_by_admin: 0,
+        is_intention_to_treat: 1
+    )
+end
 
 
 
@@ -910,17 +1891,17 @@ if __FILE__ == $0
     background                   = table_array[2]  # Background Diet
     intervention                 = table_array[3]  # INTERVENTION(S), SKIP IF OBSERVATIONAL STUDY
     outcomes                     = table_array[4]  # LIST OF ALL OUTCOMES
-    two_dichotomous              = table_array[5]  # 2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
-    two_continuous               = table_array[6]  # 2 ARMS/GROUPS: CONTINUOUS OUTCOMES
-    more_than_two_dichotomous    = table_array[7]  # ≥2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
-    more_than_two_continuous     = table_array[8]  # ≥2 ARMS/GROUPS: CONTINUOUS OUTCOMES
-    mean                         = table_array[9]  # MEAN DATA
-    other_results                = table_array[10]  # OTHER RESULTS
-    quality_interventional       = table_array[11]  # QUALITY of INTERVENTIONAL STUDIES
-    quality_case_control_studies = table_array[12]  # QUALITY of COHORT OR NESTED CASE-CONTROL STUDIES
-    comments                     = table_array[13]  # Comments
-    comments_results             = table_array[14]  # Comments for Results
-    confounders                  = table_array[15]  # Confounders
+    #two_dichotomous              = table_array[5]  # 2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
+    #two_continuous               = table_array[6]  # 2 ARMS/GROUPS: CONTINUOUS OUTCOMES
+    #more_than_two_dichotomous    = table_array[7]  # ≥2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
+    #more_than_two_continuous     = table_array[8]  # ≥2 ARMS/GROUPS: CONTINUOUS OUTCOMES
+    mean                         = table_array[5]  # MEAN DATA
+    other_results                = table_array[6]  # OTHER RESULTS
+    quality_interventional       = table_array[7]  # QUALITY of INTERVENTIONAL STUDIES
+    quality_case_control_studies = table_array[8]  # QUALITY of COHORT OR NESTED CASE-CONTROL STUDIES
+    comments                     = table_array[9]  # Comments
+    comments_results             = table_array[10]  # Comments for Results
+    confounders                  = table_array[11]  # Confounders
 
     #p eligibility
     #p population
@@ -967,8 +1948,6 @@ if __FILE__ == $0
         add_study_to_key_questions_association_qoi(study)
         add_quality_dimension_data_points_qoi(quality_interventional, study)
         key_question_id_list << 361
-    #else
-        #puts "No QUALITY of INTERVENTIONAL STUDIES found"
     end
 
     ## key_question_id: 362
@@ -977,8 +1956,10 @@ if __FILE__ == $0
         add_study_to_key_questions_association_qoc(study)
         add_quality_dimension_data_points_qoc(quality_case_control_studies, study)
         key_question_id_list << 362
-    #else
-        #puts "No QUALITY of COHORT OR NESTED CASE-CONTROL STUDIES found"
+
+        ## Since this is an observational study, there are no arms created.
+        ## However, we need at least one for results table
+        create_single_arm_for_all_participants(study)
     end
 
     add_study_to_key_questions_association(key_question_id_list, study)
@@ -991,15 +1972,19 @@ if __FILE__ == $0
     ## Create arms if intervention table is not empty
     unless interventions?(intervention)
         create_arms(study, intervention)
-        insert_arm_detail_data(study, intervention)
     end
+    insert_arm_detail_data(study, intervention)
 
     insert_baseline_characteristics(study, population)
-    create_outcomes(study, outcomes)
+
+    ## Changed my mind about this one. We will create outcomes when we scan the results tables
+    #create_outcomes(study, outcomes)
+
     insert_outcome_detail_data(study, outcomes, comments)
+    insert_confounders_info(study, confounders)
 
     ### Todo !!!
-    insert_confounders_info(study, confounders)
-    #build_results
-    #insert_adverse_events
+    build_results(study, doc)
+    build_other_results(study, doc)
+    #insert_adverse_events ???
 end
