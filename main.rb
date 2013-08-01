@@ -10,47 +10,48 @@ require_relative "trollop"
 ## Copyright::
 ## License::   Distributes under the same terms as Ruby
 
+## Loads the rails environment so we have access to the models {{{1
 def load_rails_environment
     ENV["RAILS_ENV"] = ENV["RAILS_ENV"] || "development"
     require File.expand_path(File.dirname(__FILE__) + "./../SRDR/config/environment")
 end
 
-# Minimal arg parser
-# http://trollop.rubyforge.org/
+## Minimal arg parser {{{1
+## http://trollop.rubyforge.org/
 opts = Trollop::options do
-    opt :file,            "Filename",              :type => :string, :default => ARGV[0]
+    opt :file,            "Filename",              :type => :string,  :default => ARGV[0]
     opt :project_id,      "Project ID",            :type => :integer, :default => 135
     opt :creator_id,      "Creator ID",            :type => :integer, :default => 1
     opt :dry_run,         "Dry-run. No database modifications take place"
     opt :analyze,         "Run the crawler and display statistical summary"
 end
 
-# Ensures that required arguments have been received
-# Options hash -> Boolean
+## Ensures that required arguments have been received {{{1
+## Options hash -> Boolean
 def validate_arg_list(opts)
     Trollop::die :file,            "Missing file name"                 unless opts[:file_given]
-    #Trollop::die :project_id,      "You must supply a project id"      unless opts[:project_id_given]
 end
 
-# Strips the text from any new line and tabs
-# String -> String
+## Strips the text from any new line and tabs {{{1
+## String -> String
 def clean_text(s)
     s.strip.gsub(/\n\t/, " ").gsub(/\t/, "").gsub("  ", " ")
 end
 
-# Looks for `table' tags in the document and retrieves them
-# using nokogiri parser
-# file -> Nokogiri
+## Looks for `table' tags in the document and retrieves them {{{1
+## using nokogiri parser
+## file -> Nokogiri
 #def parse_html_file(opts)
 def parse_html_file(file)
     f = File.open(file)
     Nokogiri::HTML(f)
 end
 
+## Sorts a nokogiri document into tables and appends them to an array {{{1
 def get_table_data(doc)
     tables = Array.new
 
-    # ELIGIBILITY CRITERIA AND OTHER CHARACTERISTICS
+    ## ELIGIBILITY CRITERIA AND OTHER CHARACTERISTICS
     table = doc.xpath("/html/body/p//*[contains(text(), 'ELIGIBILITY\nCRITERIA AND OTHER CHARACTERISTICS')]")[0]
     if table.nil?
         table = doc.xpath("//html/body//*[contains(text(), 'ELIGIBILITY')]/following-sibling::table[1]")
@@ -102,37 +103,37 @@ def get_table_data(doc)
     #table = split_table_data(table)
     #tables << (table)
 
-    # "MEAN\nDATA. THIS SHOULD ONLY APPLY TO CASE-COHORT STUDIES"
+    ## "MEAN\nDATA. THIS SHOULD ONLY APPLY TO CASE-COHORT STUDIES"
     table = doc.xpath("/html/body/p//*[contains(text(), 'MEAN\nDATA. THIS SHOULD ONLY APPLY TO CASE-COHORT STUDIES')]/ancestor::p[1]/following-sibling::table[1]")
     table = split_table_data(table)
     tables << table
 
-    # "OTHER RESULTS"
+    ## "OTHER RESULTS"
     table = doc.xpath("/html/body/p//*[contains(text(), 'OTHER\nRESULTS')]/ancestor::p[1]/following-sibling::table[1]")
     table = split_table_data(table)
     tables << table
 
-    # "QUALITY of INTERVENTIONAL STUDIES"
+    ## "QUALITY of INTERVENTIONAL STUDIES"
     table = doc.xpath("/html/body/p//*[contains(text(), 'QUALITY\nof INTERVENTIONAL STUDIES')]/ancestor::p[1]/following-sibling::table[1]")
     table = split_table_data(table)
     tables << table
 
-    # "QUALITY of COHORT OR NESTED CASE-CONTROL STUDIES"
+    ## "QUALITY of COHORT OR NESTED CASE-CONTROL STUDIES"
     table = doc.xpath("/html/body/p//*[contains(text(), 'QUALITY\nof COHORT OR NESTED CASE-CONTROL STUDIES')]/ancestor::p[1]/following-sibling::table[1]")
     table = split_table_data(table)
     tables << table
 
-    # Comments
+    ## Comments
     table = doc.xpath('/html/body/table//td//*[contains(text(), "Comments")]')[0].xpath('./ancestor::table[1]')
     table = split_table_data(table)
     tables << table
 
-    # Comments for results
+    ## Comments for results
     table = doc.xpath('/html/body/table//td//*[contains(text(), "Comments")]')[1].xpath('./ancestor::table[1]')
     table = split_table_data(table)
     tables << table
 
-    # Confounders
+    ## Confounders
     table = doc.xpath('/html/body//*[contains(text(), "----Confounders:")]/ancestor::p[1]/following-sibling::table[1]')
     table = split_table_data(table)
     #p table
@@ -146,9 +147,9 @@ def get_table_data(doc)
     return tables
 end
 
-# Find table row elements out of Nokogiri type object and packages them up
-# into an array
-# Nokogiri -> Array
+## Find table row elements out of Nokogiri type object and packages them up {{{1
+## into an array
+## Nokogiri -> Array
 def split_table_data(table)
     temp = Array.new
     rows = table.xpath('.//tr')
@@ -158,10 +159,10 @@ def split_table_data(table)
     return temp
 end
 
-# Helper to get_table_data function. Does the same procedure but at the row
-# level by cutting the row into the table data elements (columns) and packaging
-# them up into an array
-# Nokogiri -> Array
+## Helper to get_table_data function. Does the same procedure but at the row {{{1
+## level by cutting the row into the table data elements (columns) and packaging
+## them up into an array
+## Nokogiri -> Array
 def convert_to_array(row_data)
     temp = Array.new
     rows = row_data.xpath('./td')
@@ -171,14 +172,14 @@ def convert_to_array(row_data)
     return temp
 end
 
-# Creates an entry in `studies' table
-# Options Hash -> Study
+## Creates an entry in `studies' table {{{1
+## Options Hash -> Study
 def create_study(opts)
     Study.create(project_id: opts[:project_id],
                  creator_id: opts[:creator_id])
 end
 
-# Associates key questions to study by inserting into `study_key_questions' table
+## Associates key questions to study by inserting into `study_key_questions' table {{{1
 def add_study_to_key_questions_association(key_question_id_list, study)
     key_question_id_list.each do |n|
         StudyKeyQuestion.create(study_id: study.id,
@@ -187,8 +188,8 @@ def add_study_to_key_questions_association(key_question_id_list, study)
     end
 end
 
-# Associates key questions to study by inserting into `study_key_questions' table
-# Only when Quality Of Interventional Studies exists
+## Associates key questions to study by inserting into `study_key_questions' table {{{1
+## Only when Quality Of Interventional Studies exists
 def add_study_to_key_questions_association_qoi(study)
     StudyKeyQuestion.create(study_id: study.id,
                             key_question_id: 361,
@@ -197,8 +198,8 @@ def add_study_to_key_questions_association_qoi(study)
                                extraction_form_id: 190)
 end
 
-# Associates key questions to study by inserting into `study_key_questions' table
-# Only when Quality Of Cohort Or Nested Case-Control Studies exists
+## Associates key questions to study by inserting into `study_key_questions' table {{{1
+## Only when Quality Of Cohort Or Nested Case-Control Studies exists
 def add_study_to_key_questions_association_qoc(study)
     StudyKeyQuestion.create(study_id: study.id,
                             key_question_id: 362,
@@ -207,32 +208,32 @@ def add_study_to_key_questions_association_qoc(study)
                                extraction_form_id: 193)
 end
 
-# Associates study to extraction form by inserting into `study_extraction_forms' table
+## Associates study to extraction form by inserting into `study_extraction_forms' table {{{1
 def add_study_to_extraction_form_association(study)
     StudyExtractionForm.create(study_id: study.id,
                                extraction_form_id: 194)
 end
 
-# Determines if quality of interventional studies table has any entries
-# QualityOfInterventionalStudiesTableArray -> Boolean
+## Determines if quality of interventional studies table has any entries {{{1
+## QualityOfInterventionalStudiesTableArray -> Boolean
 def quality_of_interventional_studies?(q)
-    # First row are the headers. We need to look at the first element of the next row
+    ## First row are the headers. We need to look at the first element of the next row
     row = q[1]
-    # Return false if it is blank, else true
+    ## Return false if it is blank, else true
     row[0].blank? ? false : true
 end
 
-# Determines if quality of cohort or nested case control studies table has any entries
-# QualityOfCohortOrNestedCaseControlStudiesTableArray -> Boolean
+## Determines if quality of cohort or nested case control studies table has any entries {{{1
+## QualityOfCohortOrNestedCaseControlStudiesTableArray -> Boolean
 def quality_of_cohort_or_nested_case_control_studies?(q)
-    # First row are the headers. We need to look at the first element of the next row
+    ## First row are the headers. We need to look at the first element of the next row
     row = q[1]
-    # Return false if it is blank, else true
+    ## Return false if it is blank, else true
     row[0].blank? ? false : true
 end
 
-# Inserts publication information for this study
-# Study EligibilityTableArray -> nil
+## Inserts publication information for this study {{{1
+## Study EligibilityTableArray -> nil
 def insert_publication_information(study, eligibility)
     internal_id = eligibility[1][0]
     pp = PrimaryPublication.create(study_id: study.id,
@@ -250,17 +251,17 @@ def insert_publication_information(study, eligibility)
                                     number_type: "internal")
 end
 
-# Uses the eligibility table to retrieve the UI value. The UI value corresponds to Pubmed IDs
-# EligibilityTableArray -> Natural
+## Uses the eligibility table to retrieve the UI value. The UI value corresponds to Pubmed IDs {{{1
+## EligibilityTableArray -> Natural
 def retrieve_pmid_from_eligibility_table(eligibility)
-    # Skip the header row
+    ## Skip the header row
     first_data_row = eligibility[1]
 
-    # UI column
+    ## UI column
     first_data_row[0]
 end
 
-# Helper to translate short answers to full length
+## Helper to translate short answers to full length {{{1
 def trans_yes_no_nd(s)
     s = "nd" if s.blank?
     t = {"y" => "Yes",
@@ -272,97 +273,98 @@ def trans_yes_no_nd(s)
     t[s.downcase] || s unless s.blank?
 end
 
+## Adds quality dimension data points for quality of interventional studies {{{1
 def add_quality_dimension_data_points_qoi(quality_interventional, study)
     row = quality_interventional[1]
     adverse_event_value = quality_interventional[2][1]
     explanation = quality_interventional[3][1]
     fields = QualityDimensionField.find(:all, :order => "id", :conditions => { :extraction_form_id => 190 })
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[0].id,  # appropriate randomization
+        quality_dimension_field_id: fields[0].id,  ## appropriate randomization
         value: trans_yes_no_nd(row[3]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 190)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[1].id,  # allocation concealment
+        quality_dimension_field_id: fields[1].id,  ## allocation concealment
         value: trans_yes_no_nd(row[4]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 190)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[2].id,  # dropout rate < 20%
+        quality_dimension_field_id: fields[2].id,  ## dropout rate < 20%
         value: trans_yes_no_nd(row[6]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 190)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[3].id,  # blinded outcome
+        quality_dimension_field_id: fields[3].id,  ## blinded outcome
         value: trans_yes_no_nd(row[7]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 190)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[4].id,  # intention to treat
+        quality_dimension_field_id: fields[4].id,  ## intention to treat
         value: trans_yes_no_nd(row[8]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 190)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[5].id,  # appropriate statistical analysis
+        quality_dimension_field_id: fields[5].id,  ## appropriate statistical analysis
         value: trans_yes_no_nd(row[9]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 190)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[6].id,  # assessment for confounding
+        quality_dimension_field_id: fields[6].id,  ## assessment for confounding
         value: trans_yes_no_nd(row[10]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 190)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[7].id,  # clear reporting
+        quality_dimension_field_id: fields[7].id,  ## clear reporting
         value: trans_yes_no_nd(row[11]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 190)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[8].id,  # appropriate washout period
+        quality_dimension_field_id: fields[8].id,  ## appropriate washout period
         value: trans_yes_no_nd(row[5]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 190)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[9].id,  # design
+        quality_dimension_field_id: fields[9].id,  ## design
         value: trans_yes_no_nd(row[2]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 190)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[10].id,  # adverse events
+        quality_dimension_field_id: fields[10].id,  ## adverse events
         value: trans_yes_no_nd(adverse_event_value),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 190)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[11].id,  # overall grade
+        quality_dimension_field_id: fields[11].id,  ## overall grade
         value: row[12],
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 190)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[12].id,  # explanation
+        quality_dimension_field_id: fields[12].id,  ## explanation
         value: explanation,
         notes: "",
         study_id: study.id,
@@ -370,6 +372,7 @@ def add_quality_dimension_data_points_qoi(quality_interventional, study)
         extraction_form_id: 190)
 end
 
+## Adds quality dimension data points for quality of cohort studies {{{1
 def add_quality_dimension_data_points_qoc(quality_case_control_studies, study)
     overall_grade = quality_case_control_studies[4][1]
     explanation = quality_case_control_studies[5][1]
@@ -378,56 +381,56 @@ def add_quality_dimension_data_points_qoc(quality_case_control_studies, study)
     row3 = quality_case_control_studies[3]
     fields = QualityDimensionField.find(:all, :order => "id", :conditions => { :extraction_form_id => 193 })
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[0].id,  # eligibility criteria clear
+        quality_dimension_field_id: fields[0].id,  ## eligibility criteria clear
         value: trans_yes_no_nd(row1[3]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[2].id,  # exposure assessor blinded
+        quality_dimension_field_id: fields[2].id,  ## exposure assessor blinded
         value: trans_yes_no_nd(row1[5]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[4].id,  # method reported
+        quality_dimension_field_id: fields[4].id,  ## method reported
         value: trans_yes_no_nd(row1[7]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[7].id,  # one of the prespecified methods
+        quality_dimension_field_id: fields[7].id,  ## one of the prespecified methods
         value: trans_yes_no_nd(row1[9]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[9].id,  # level of the exposure
+        quality_dimension_field_id: fields[9].id,  ## level of the exposure
         value: trans_yes_no_nd(row1[11]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[10].id,  # adjusted or matched
+        quality_dimension_field_id: fields[10].id, ## adjusted or matched
         value: trans_yes_no_nd(row1[13]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[12].id,  # clear definition
+        quality_dimension_field_id: fields[12].id,  ## clear definition
         value: trans_yes_no_nd(row1[15]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[15].id,  # prospective collection
+        quality_dimension_field_id: fields[15].id,  ## prospective collection
         value: trans_yes_no_nd(row1[17]),
         notes: "",
         study_id: study.id,
@@ -435,42 +438,42 @@ def add_quality_dimension_data_points_qoc(quality_case_control_studies, study)
         extraction_form_id: 193)
 #########################################
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[1].id,  # sampling of population
+        quality_dimension_field_id: fields[1].id,  ## sampling of population
         value: trans_yes_no_nd(row2[1]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[3].id,  # outcome assessor
+        quality_dimension_field_id: fields[3].id,  ## outcome assessor
         value: trans_yes_no_nd(row2[3]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[5].id,  # food composition database
+        quality_dimension_field_id: fields[5].id,  ## food composition database
         value: trans_yes_no_nd(row2[5]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[8].id,  # time from sample
+        quality_dimension_field_id: fields[8].id,  ## time from sample
         value: trans_yes_no_nd(row2[7]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[13].id,  # loss to follow up
+        quality_dimension_field_id: fields[13].id,  ## loss to follow up
         value: trans_yes_no_nd(row2[9]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[16].id,  # analysis was planned
+        quality_dimension_field_id: fields[16].id,  ## analysis was planned
         value: trans_yes_no_nd(row2[11]),
         notes: "",
         study_id: study.id,
@@ -478,28 +481,28 @@ def add_quality_dimension_data_points_qoc(quality_case_control_studies, study)
         extraction_form_id: 193)
 #########################################
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[6].id,  # internal calibration
+        quality_dimension_field_id: fields[6].id,  ## internal calibration
         value: trans_yes_no_nd(row3[5]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[11].id,  # justification
+        quality_dimension_field_id: fields[11].id,  ## justification
         value: trans_yes_no_nd(row3[11]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[14].id,  # do the authors specify
+        quality_dimension_field_id: fields[14].id,  ## do the authors specify
         value: trans_yes_no_nd(row3[13]),
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[17].id,  # justification of sample size
+        quality_dimension_field_id: fields[17].id,  ## justification of sample size
         value: trans_yes_no_nd(row3[15]),
         notes: "",
         study_id: study.id,
@@ -507,14 +510,14 @@ def add_quality_dimension_data_points_qoc(quality_case_control_studies, study)
         extraction_form_id: 193)
 #########################################
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[18].id,  # overall grade
+        quality_dimension_field_id: fields[18].id,  ## overall grade
         value: overall_grade,
         notes: "",
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 193)
     QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[19].id,  # explanation
+        quality_dimension_field_id: fields[19].id,  ## explanation
         value: explanation,
         notes: "",
         study_id: study.id,
@@ -522,13 +525,13 @@ def add_quality_dimension_data_points_qoc(quality_case_control_studies, study)
         extraction_form_id: 193)
 end
 
-# Inserts design detail data points into `design_detail_data_points' table
+## Inserts design detail data points into `design_detail_data_points' table {{{1
 def insert_design_detail_data(study, eligibility, background)
     eligibility_data_row = eligibility[1]
     background_first_row = background[1]
     background_second_row = background[2]
     design_details_qs = DesignDetail.find(:all, :order => "question_number", :conditions => { extraction_form_id: 194 })
-    DesignDetailDataPoint.create(design_detail_field_id: design_details_qs[0].id,  # study design
+    DesignDetailDataPoint.create(design_detail_field_id: design_details_qs[0].id,  ## study design
                                  value: trans_yes_no_nd(eligibility_data_row[2]),
                                  notes: nil,
                                  study_id: study.id,
@@ -538,7 +541,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  column_field_id: 0,
                                  arm_id: 0,
                                  outcome_id: 0)
-    DesignDetailDataPoint.create(design_detail_field_id: design_details_qs[1].id,  # inclusion
+    DesignDetailDataPoint.create(design_detail_field_id: design_details_qs[1].id,  ## inclusion
                                  value: trans_yes_no_nd(eligibility_data_row[3]),
                                  notes: nil,
                                  study_id: study.id,
@@ -548,7 +551,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  column_field_id: 0,
                                  arm_id: 0,
                                  outcome_id: 0)
-    DesignDetailDataPoint.create(design_detail_field_id: design_details_qs[2].id,  # exclusion
+    DesignDetailDataPoint.create(design_detail_field_id: design_details_qs[2].id,  ## exclusion
                                  value: trans_yes_no_nd(eligibility_data_row[4]),
                                  notes: nil,
                                  study_id: study.id,
@@ -558,7 +561,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  column_field_id: 0,
                                  arm_id: 0,
                                  outcome_id: 0)
-    DesignDetailDataPoint.create(design_detail_field_id: design_details_qs[3].id,  # enrollment years
+    DesignDetailDataPoint.create(design_detail_field_id: design_details_qs[3].id,  ## enrollment years
                                  value: trans_yes_no_nd(eligibility_data_row[5]),
                                  notes: nil,
                                  study_id: study.id,
@@ -568,7 +571,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  column_field_id: 0,
                                  arm_id: 0,
                                  outcome_id: 0)
-    DesignDetailDataPoint.create(design_detail_field_id: design_details_qs[4].id,  # trial or cohort
+    DesignDetailDataPoint.create(design_detail_field_id: design_details_qs[4].id,  ## trial or cohort
                                  value: trans_yes_no_nd(eligibility_data_row[6]),
                                  notes: nil,
                                  study_id: study.id,
@@ -578,7 +581,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  column_field_id: 0,
                                  arm_id: 0,
                                  outcome_id: 0)
-    DesignDetailDataPoint.create(design_detail_field_id: design_details_qs[5].id,  # funding source
+    DesignDetailDataPoint.create(design_detail_field_id: design_details_qs[5].id,  ## funding source
                                  value: trans_yes_no_nd(eligibility_data_row[7]),
                                  notes: nil,
                                  study_id: study.id,
@@ -588,7 +591,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  column_field_id: 0,
                                  arm_id: 0,
                                  outcome_id: 0)
-    DesignDetailDataPoint.create(design_detail_field_id: design_details_qs[6].id,  # extractor
+    DesignDetailDataPoint.create(design_detail_field_id: design_details_qs[6].id,  ## extractor
                                  value: trans_yes_no_nd(eligibility_data_row[8]),
                                  notes: nil,
                                  study_id: study.id,
@@ -602,7 +605,7 @@ def insert_design_detail_data(study, eligibility, background)
 ############################################################################
     # 25(OH)D and/or
     DesignDetailDataPoint.create(design_detail_field_id: 1927,
-                                 value: trans_yes_no_nd(background_first_row[6]),  # biomarker assay
+                                 value: trans_yes_no_nd(background_first_row[6]),  ## biomarker assay
                                  notes: nil,
                                  study_id: study.id,
                                  extraction_form_id: 194,
@@ -612,7 +615,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  arm_id: 0,
                                  outcome_id: 0)
     DesignDetailDataPoint.create(design_detail_field_id: 1927,
-                                 value: trans_yes_no_nd(background_first_row[7]),  # analytical validity
+                                 value: trans_yes_no_nd(background_first_row[7]),  ## analytical validity
                                  notes: nil,
                                  study_id: study.id,
                                  extraction_form_id: 194,
@@ -622,7 +625,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  arm_id: 0,
                                  outcome_id: 0)
     DesignDetailDataPoint.create(design_detail_field_id: 1927,
-                                 value: trans_yes_no_nd(background_first_row[8]),  # time between
+                                 value: trans_yes_no_nd(background_first_row[8]),  ## time between
                                  notes: nil,
                                  study_id: study.id,
                                  extraction_form_id: 194,
@@ -632,7 +635,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  arm_id: 0,
                                  outcome_id: 0)
     DesignDetailDataPoint.create(design_detail_field_id: 1927,
-                                 value: trans_yes_no_nd(background_first_row[9]),  # season/date
+                                 value: trans_yes_no_nd(background_first_row[9]),  ## season/date
                                  notes: nil,
                                  study_id: study.id,
                                  extraction_form_id: 194,
@@ -642,7 +645,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  arm_id: 0,
                                  outcome_id: 0)
     DesignDetailDataPoint.create(design_detail_field_id: 1927,
-                                 value: trans_yes_no_nd(background_first_row[10]),  # background exposure
+                                 value: trans_yes_no_nd(background_first_row[10]),  ## background exposure
                                  notes: nil,
                                  study_id: study.id,
                                  extraction_form_id: 194,
@@ -653,9 +656,9 @@ def insert_design_detail_data(study, eligibility, background)
                                  outcome_id: 0)
 ############################################################################
 ############################################################################
-    # dietary calcium intake
+    ## dietary calcium intake
     DesignDetailDataPoint.create(design_detail_field_id: 1928,
-                                 value: trans_yes_no_nd(background_second_row[3]),  # dietary assessment method
+                                 value: trans_yes_no_nd(background_second_row[3]),  ## dietary assessment method
                                  notes: nil,
                                  study_id: study.id,
                                  extraction_form_id: 194,
@@ -665,7 +668,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  arm_id: 0,
                                  outcome_id: 0)
     DesignDetailDataPoint.create(design_detail_field_id: 1928,
-                                 value: trans_yes_no_nd(background_second_row[4]),  # food composition
+                                 value: trans_yes_no_nd(background_second_row[4]),  ## food composition
                                  notes: nil,
                                  study_id: study.id,
                                  extraction_form_id: 194,
@@ -675,7 +678,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  arm_id: 0,
                                  outcome_id: 0)
     DesignDetailDataPoint.create(design_detail_field_id: 1928,
-                                 value: trans_yes_no_nd(background_second_row[5]),  # internal calibration
+                                 value: trans_yes_no_nd(background_second_row[5]),  ## internal calibration
                                  notes: nil,
                                  study_id: study.id,
                                  extraction_form_id: 194,
@@ -685,7 +688,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  arm_id: 0,
                                  outcome_id: 0)
     DesignDetailDataPoint.create(design_detail_field_id: 1928,
-                                 value: trans_yes_no_nd(background_second_row[6]),  # biomarker assay
+                                 value: trans_yes_no_nd(background_second_row[6]),  ## biomarker assay
                                  notes: nil,
                                  study_id: study.id,
                                  extraction_form_id: 194,
@@ -695,7 +698,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  arm_id: 0,
                                  outcome_id: 0)
     DesignDetailDataPoint.create(design_detail_field_id: 1928,
-                                 value: trans_yes_no_nd(background_second_row[7]),  # analytical validity
+                                 value: trans_yes_no_nd(background_second_row[7]),  ## analytical validity
                                  notes: nil,
                                  study_id: study.id,
                                  extraction_form_id: 194,
@@ -705,7 +708,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  arm_id: 0,
                                  outcome_id: 0)
     DesignDetailDataPoint.create(design_detail_field_id: 1928,
-                                 value: trans_yes_no_nd(background_second_row[9]),  # season/date
+                                 value: trans_yes_no_nd(background_second_row[9]),  ## season/date
                                  notes: nil,
                                  study_id: study.id,
                                  extraction_form_id: 194,
@@ -715,7 +718,7 @@ def insert_design_detail_data(study, eligibility, background)
                                  arm_id: 0,
                                  outcome_id: 0)
     DesignDetailDataPoint.create(design_detail_field_id: 1928,
-                                 value: trans_yes_no_nd(background_second_row[10]),  # background
+                                 value: trans_yes_no_nd(background_second_row[10]),  ## background
                                  notes: nil,
                                  study_id: study.id,
                                  extraction_form_id: 194,
@@ -726,16 +729,16 @@ def insert_design_detail_data(study, eligibility, background)
                                  outcome_id: 0)
 end
 
-# Test if 1st cell in intervention table is a number
-# InterventionalTableArray -> Boolean
+## Test if 1st cell in intervention table is a number {{{1
+## InterventionalTableArray -> Boolean
 def interventions?(intervention)
     intervention[1][0].blank?
 end
 
-# Finds all arms for this study and attempts to make references to
-# arms already created for this project. There are only 4 default
-# to choose from atm; there might be more types of arms
-# Study InterventionalTableArray -> nil
+## Finds all arms for this study and attempts to make references to {{{1
+## arms already created for this project. There are only 4 default
+## to choose from atm; there might be more types of arms
+## Study InterventionalTableArray -> nil
 def create_arms(study, intervention)
     data_rows = intervention[1..-3]
     data_rows.each do |row|
@@ -749,9 +752,9 @@ def create_arms(study, intervention)
     end
 end
 
-# Inserts arm detail data points
-# Study InterventionalTableArray -> nil
-# !!!
+## Inserts arm detail data points {{{1
+## Study InterventionalTableArray -> nil
+## !!!
 def insert_arm_detail_data(study, intervention)
     co_interventions = trans_yes_no_nd(intervention[-2][1])
     compliance_adherence = trans_yes_no_nd(intervention[-1][1])
@@ -788,7 +791,7 @@ def insert_arm_detail_data(study, intervention)
     end
 end
 
-# Inserts baselineline characteristics. We are placing all values into All Arms (Total)
+## Inserts baselineline characteristics. We are placing all values into All Arms (Total) {{{1
 def insert_baseline_characteristics(study, population)
     baseline_characteristics = BaselineCharacteristic.find(:all,
                                                            :order => "question_number",
@@ -810,7 +813,7 @@ def insert_baseline_characteristics(study, population)
     end
 end
 
-# Attempts to find all outcomes for this study and create an entry in `outcomes' table
+## Attempts to find all outcomes for this study and create an entry in `outcomes' table {{{1
 def create_outcomes(study, outcomes)
     outcomes[1..-1].each_with_index do |outcome|
         unless outcome[2].blank?
@@ -833,6 +836,7 @@ def create_outcomes(study, outcomes)
     end
 end
 
+## Inserts outcome detail data points {{{1
 def insert_outcome_detail_data(study, outcomes_table, comments)
     outcomes_table = outcomes_table[1..-1]
     p "outcomes table: "
@@ -912,6 +916,7 @@ def insert_outcome_detail_data(study, outcomes_table, comments)
     end
 end
 
+## Inserts confounders data {{{1
 def insert_confounders_info(study, confounders)
     confounders_row1 = confounders[1]
     confounders[1] = confounders_row1[2..-1]
@@ -948,7 +953,7 @@ def insert_confounders_info(study, confounders)
     end
 end
 
-## Given the outcome title, find it in the db or create a new one
+## Given the outcome title, find it in the db or create a new one {{{1
 ## STRING STUDY -> OUTCOME
 def create_outcome_if_needed(outcome_title, unit, study, outcome_type)
     outcome = Outcome.find(:last, :conditions =>
@@ -969,6 +974,7 @@ def create_outcome_if_needed(outcome_title, unit, study, outcome_type)
     return outcome
 end
 
+## Cretes arms but only if none with that name can be found for this study {{{1
 def create_arm_if_needed(arm_title, study)
     arm = Arm.find(:last, :conditions =>
                    ["study_id=? AND title LIKE ? AND extraction_form_id=?",
@@ -988,6 +994,7 @@ def create_arm_if_needed(arm_title, study)
     return arm
 end
 
+## Finds the last outcome created, sorted by id {{{1
 def find_last_outcome_created(study, outcome_type)
     Outcome.find(:last, :conditions => {
         study_id: study.id,
@@ -996,11 +1003,12 @@ def find_last_outcome_created(study, outcome_type)
     })
 end
 
+## Builds the results table {{{1
 def build_results(study, doc)
     main_more_than_two_continuous, main_exactly_two_continuous, main_more_than_two_dichotomous, main_exactly_two_dichotomous,
         sub_more_than_two_continuous, sub_exactly_two_continuous, sub_more_than_two_dichotomous, sub_exactly_two_dichotomous = split_results_tables_into_groups(doc)
 
-    main_more_than_two_continuous.each do |table|
+    main_more_than_two_continuous.each do |table|  #{{{2
         unless table[1][4].blank?
             table_headers = table[0]
             outcome_measures = table_headers[5..-4]
@@ -1092,7 +1100,7 @@ def build_results(study, doc)
         end
     end
 
-    main_exactly_two_continuous.each do |table|
+    main_exactly_two_continuous.each do |table|  #{{{2
         table = table[1..-1]
         table.each_with_index do |row, i|
             @h_unit = row[3] unless row[7].blank?
@@ -1473,7 +1481,7 @@ def build_results(study, doc)
         end
     end
 
-    main_more_than_two_dichotomous.each do |table|
+    main_more_than_two_dichotomous.each do |table|  #{{{2
         #table_headers = table[0]
         #outcome_measures = table_headers[4..-3]
         table = table[1..-1]
@@ -1865,7 +1873,7 @@ def build_results(study, doc)
         end
     end
 
-    main_exactly_two_dichotomous.each do |table|
+    main_exactly_two_dichotomous.each do |table|  #{{{2
         unless table[2][0].blank?
             #table_headers_lv1 = table[0]
             #table_headers_lv2 = table[1]
@@ -2165,7 +2173,7 @@ def build_results(study, doc)
         end
     end
 
-    sub_more_than_two_continuous.each do |table|
+    sub_more_than_two_continuous.each do |table|  #{{{2
         unless table[1][4].blank?
             table_headers = table[0]
             outcome_measures = table_headers[5..-4]
@@ -2257,7 +2265,7 @@ def build_results(study, doc)
         end
     end
 
-    sub_exactly_two_continuous.each do |table|
+    sub_exactly_two_continuous.each do |table|  #{{{2
         table = table[1..-1]
         table.each_with_index do |row, i|
             @h_unit = row[3] unless row[7].blank?
@@ -2670,7 +2678,7 @@ def build_results(study, doc)
         end
     end
 
-    sub_more_than_two_dichotomous.each do |table|
+    sub_more_than_two_dichotomous.each do |table|  #{{{2
         table = table[1..-1]
         unless table.blank?
             table.each do |row|
@@ -3012,7 +3020,7 @@ def build_results(study, doc)
         end
     end
 
-    sub_exactly_two_dichotomous.each do |table|
+    sub_exactly_two_dichotomous.each do |table|  #{{{2
         unless table[2][0].blank?
             #table_headers_lv1 = table[0]
             #table_headers_lv2 = table[1]
@@ -3313,7 +3321,7 @@ def build_results(study, doc)
     end
 end
 
-## Splits up all the different kinds of result tables
+## Splits up all the different kinds of result tables {{{1
 ## NOKOGIRI -> [[[ARRAY][ARRAY]..[ARRAY]]]
 def split_results_tables_into_groups(doc)
     main_exactly_two_continuous = Array.new
@@ -3405,6 +3413,7 @@ end
 def build_mean_data(study, mean)
 end
 
+## Creates a single arm named 'All Participants'. This is needed for cohort studies {{{1
 def create_single_arm_for_all_participants(study)
     Arm.create(
         study_id: study.id,
@@ -3419,14 +3428,14 @@ end
 
 
 
-if __FILE__ == $0
+if __FILE__ == $0  ## {{{1
     key_question_id_list = [356, 357, 358, 359, 360]
     table_array = Array.new
     pmids = Array.new
 
     validate_arg_list(opts)
 
-    ## Load rails environment so we can access database object as well as use rails
+    ## Load rails environment so we can access database object as well as use rails {{{2
     ## specific methods like blank?
     load_rails_environment
 
@@ -3517,7 +3526,7 @@ if __FILE__ == $0
 
     insert_confounders_info(study, confounders)
 
-    ### Todo !!!
+    ### Todo !!!  {{{2
     build_mean_data(study, mean) # !!!
     build_other_results(study, doc) # !!!
     #insert_adverse_events ???
