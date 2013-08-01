@@ -831,17 +831,18 @@ def insert_baseline_characteristics(study, population)
 end
 
 ## Attempts to find all outcomes for this study and create an entry in `outcomes' table {{{1
-def create_outcomes(study, outcomes)
-    outcomes[1..-1].each_with_index do |outcome|
-        unless outcome[2].blank?
+def create_outcomes(study, outcomes)#, outcome_type)
+    outcomes[1..-1].each_with_index do |row|
+        unless row[2].blank?
             outcome = Outcome.create(
                 study_id: study.id,
-                title: outcome[3],
+                title: row[3],
                 is_primary: 1,
                 units: "",
-                description: outcome[2],
+                description: row[2],
                 notes: "",
                 outcome_type: "Continuous",
+                #outcome_type: outcome_type,
                 extraction_form_id: 194
             )
             OutcomeTimepoint.create(
@@ -856,76 +857,82 @@ end
 ## Inserts outcome detail data points {{{1
 def insert_outcome_detail_data(study, outcomes_table, comments)
     outcomes_table = outcomes_table[1..-1]
-    outcomes = Outcome.find(:all, :order => "id",
-                            :conditions => { study_id: study.id, extraction_form_id: 194 })
-    outcomes_table.each_with_index do |row, m|
-        outcomes.each_with_index do |outcome, n|
-            outcome_detail = OutcomeDetail.find(:first, :conditions => {
-                question: "Primary / Secondary Outcome",
-                extraction_form_id: 194
-            })
-            OutcomeDetailDataPoint.create(
-                outcome_detail_field_id: outcome_detail.id,
-                value: trans_yes_no_nd(row[2]),
-                notes: nil,
-                study_id: study.id,
-                extraction_form_id: 194,
-                subquestion_value: nil,
-                row_field_id: 0,
-                column_field_id: 0,
-                arm_id: 0,
-                outcome_id: outcome.id
-            )
-            outcome_detail = OutcomeDetail.find(:first, :conditions => {
-                question: "Outcome",
-                extraction_form_id: 194
-            })
-            OutcomeDetailDataPoint.create(
-                outcome_detail_field_id: outcome_detail.id,
-                value: trans_yes_no_nd(row[3]),
-                notes: nil,
-                study_id: study.id,
-                extraction_form_id: 194,
-                subquestion_value: nil,
-                row_field_id: 0,
-                column_field_id: 0,
-                arm_id: 0,
-                outcome_id: outcome.id
-            )
-            outcome_detail = OutcomeDetail.find(:first, :conditions => {
-                question: "Definition",
-                extraction_form_id: 194
-            })
-            OutcomeDetailDataPoint.create(
-                outcome_detail_field_id: outcome_detail.id,
-                value: trans_yes_no_nd(row[4]),
-                notes: nil,
-                study_id: study.id,
-                extraction_form_id: 194,
-                subquestion_value: nil,
-                row_field_id: 0,
-                column_field_id: 0,
-                arm_id: 0,
-                outcome_id: outcome.id
-            )
-            outcome_detail = OutcomeDetail.find(:first, :conditions => {
-                question: "Comments",
-                extraction_form_id: 194
-            })
-            OutcomeDetailDataPoint.create(
-                outcome_detail_field_id: outcome_detail.id,
-                value: trans_yes_no_nd(comments[1][2]),
-                notes: nil,
-                study_id: study.id,
-                extraction_form_id: 194,
-                subquestion_value: nil,
-                row_field_id: 0,
-                column_field_id: 0,
-                arm_id: 0,
-                outcome_id: outcome.id
-            )
-        end unless row[0].blank?
-    end
+    #outcomes = Outcome.find(:all, :order => "id",
+    #                        :conditions => { study_id: study.id, extraction_form_id: 194 })
+    #outcomes.each_with_index do |outcome, n|
+        outcomes_table.each_with_index do |row, m|
+            unless row[0].blank?
+                outcome = Outcome.find(:first, :order => "id",
+                                       :conditions => { study_id: study.id,
+                                                        extraction_form_id: 194,
+                                                        title: row[3] })
+                outcome_detail = OutcomeDetail.find(:first, :conditions => {
+                    question: "Primary / Secondary Outcome",
+                    extraction_form_id: 194
+                })
+                OutcomeDetailDataPoint.create(
+                    outcome_detail_field_id: outcome_detail.id,
+                    value: trans_yes_no_nd(row[2]),
+                    notes: nil,
+                    study_id: study.id,
+                    extraction_form_id: 194,
+                    subquestion_value: nil,
+                    row_field_id: 0,
+                    column_field_id: 0,
+                    arm_id: 0,
+                    outcome_id: outcome.id
+                )
+                outcome_detail = OutcomeDetail.find(:first, :conditions => {
+                    question: "Outcome",
+                    extraction_form_id: 194
+                })
+                OutcomeDetailDataPoint.create(
+                    outcome_detail_field_id: outcome_detail.id,
+                    value: trans_yes_no_nd(row[3]),
+                    notes: nil,
+                    study_id: study.id,
+                    extraction_form_id: 194,
+                    subquestion_value: nil,
+                    row_field_id: 0,
+                    column_field_id: 0,
+                    arm_id: 0,
+                    outcome_id: outcome.id
+                )
+                outcome_detail = OutcomeDetail.find(:first, :conditions => {
+                    question: "Definition",
+                    extraction_form_id: 194
+                })
+                OutcomeDetailDataPoint.create(
+                    outcome_detail_field_id: outcome_detail.id,
+                    value: trans_yes_no_nd(row[4]),
+                    notes: nil,
+                    study_id: study.id,
+                    extraction_form_id: 194,
+                    subquestion_value: nil,
+                    row_field_id: 0,
+                    column_field_id: 0,
+                    arm_id: 0,
+                    outcome_id: outcome.id
+                )
+                outcome_detail = OutcomeDetail.find(:first, :conditions => {
+                    question: "Comments",
+                    extraction_form_id: 194
+                })
+                OutcomeDetailDataPoint.create(
+                    outcome_detail_field_id: outcome_detail.id,
+                    value: trans_yes_no_nd(comments[1][2]),
+                    notes: nil,
+                    study_id: study.id,
+                    extraction_form_id: 194,
+                    subquestion_value: nil,
+                    row_field_id: 0,
+                    column_field_id: 0,
+                    arm_id: 0,
+                    outcome_id: outcome.id
+                )
+            end
+        end
+    #end
 end
 
 ## Inserts confounders data {{{1
@@ -1028,6 +1035,7 @@ def build_results(study, doc)
             table.each do |row|
                 unless row[2].blank?  # This is a row with a new outcome
                     ##        create_outcome_if_needed(outcome_title, unit, study, outcome_type)
+                    #outcome = create_outcome_if_needed(row[2], row[3], study, "Continuous")
                     outcome = create_outcome_if_needed(row[2], row[3], study, "Continuous")
                     arm = create_arm_if_needed(arm_title=row[4], study)
                     t = OutcomeTimepoint.create(
@@ -3434,6 +3442,19 @@ def create_single_arm_for_all_participants(study)
     )
 end
 
+## Determines whether this study is interventional or observational {{{1
+## ARRAY ARRAY -> STRING
+def find_outcome_type(quality_interventional, quality_case_control_studies)
+    unless quality_interventional[1][0].blank?
+        return "Categorical"
+    end
+    unless quality_case_control_studies[1][0].blank?
+        return "Continuous"
+    end
+    p "WTF -- This thing is neither Categorical or Continuous!!!!"
+    gets
+end
+
 
 
 if __FILE__ == $0  ## {{{1
@@ -3474,6 +3495,7 @@ if __FILE__ == $0  ## {{{1
     if pmid.blank?
         puts "*** ERROR ***"
         puts "No UI value found"
+        puts "File name: #{opts[:file]}"
         gets
     else
         ## Study.create_for_pmids expects pmids to be an array, so we wrap pmid
@@ -3524,17 +3546,17 @@ if __FILE__ == $0  ## {{{1
 
     insert_baseline_characteristics(study, population)
 
+    #{{{2
     ## Changed my mind about this one. We will create outcomes when we scan the results tables
-    #create_outcomes(study, outcomes)
+    #outcome_type = find_outcome_type(quality_interventional, quality_case_control_studies)
+    create_outcomes(study, outcomes)#, outcome_type)
+    insert_outcome_detail_data(study, outcomes, comments)
 
-    build_results(study, doc)  # !!!
+    ### Todo !!!
+    #build_results(study, doc)  # !!!
 
-    # !!!
-    #insert_outcome_detail_data(study, outcomes, comments)
+    insert_confounders_info(study, confounders)  ## This is done actually
 
-    insert_confounders_info(study, confounders)
-
-    ### Todo !!!  {{{2
     build_mean_data(study, mean) # !!!
     build_other_results(study, doc) # !!!
 end
