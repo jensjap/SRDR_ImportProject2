@@ -356,20 +356,27 @@ def add_quality_dimension_data_points_qoi(quality_interventional, study)
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 190)
-    QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[11].id,  ## overall grade
-        value: row[12],
-        notes: "",
+#    QualityDimensionDataPoint.create(
+#        quality_dimension_field_id: fields[11].id,  ## overall grade
+#        value: row[12],
+#        notes: "",
+#        study_id: study.id,
+#        field_type: nil,
+#        extraction_form_id: 190)
+#    QualityDimensionDataPoint.create(
+#        quality_dimension_field_id: fields[12].id,  ## explanation
+#        value: explanation,
+#        notes: "",
+#        study_id: study.id,
+#        field_type: nil,
+#        extraction_form_id: 190)
+    QualityRatingDataPoint.create(
         study_id: study.id,
-        field_type: nil,
-        extraction_form_id: 190)
-    QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[12].id,  ## explanation
-        value: explanation,
-        notes: "",
-        study_id: study.id,
-        field_type: nil,
-        extraction_form_id: 190)
+        guideline_used: '',
+        current_overall_rating: row[12],
+        notes: explanation,
+        extraction_form_id: 190,
+    )
 end
 
 ## Adds quality dimension data points for quality of cohort studies {{{1
@@ -509,20 +516,27 @@ def add_quality_dimension_data_points_qoc(quality_case_control_studies, study)
         field_type: nil,
         extraction_form_id: 193)
 #########################################
-    QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[18].id,  ## overall grade
-        value: overall_grade,
-        notes: "",
+#    QualityDimensionDataPoint.create(
+#        quality_dimension_field_id: fields[18].id,  ## overall grade
+#        value: overall_grade,
+#        notes: "",
+#        study_id: study.id,
+#        field_type: nil,
+#        extraction_form_id: 193)
+#    QualityDimensionDataPoint.create(
+#        quality_dimension_field_id: fields[19].id,  ## explanation
+#        value: explanation,
+#        notes: "",
+#        study_id: study.id,
+#        field_type: nil,
+#        extraction_form_id: 193)
+    QualityRatingDataPoint.create(
         study_id: study.id,
-        field_type: nil,
-        extraction_form_id: 193)
-    QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[19].id,  ## explanation
-        value: explanation,
-        notes: "",
-        study_id: study.id,
-        field_type: nil,
-        extraction_form_id: 193)
+        guideline_used: '',
+        current_overall_rating: overall_grade,
+        notes: explanation,
+        extraction_form_id: 193,
+    )
 end
 
 ## Inserts design detail data points into `design_detail_data_points' table {{{1
@@ -581,6 +595,9 @@ def insert_design_detail_data(study, eligibility, background)
                                  column_field_id: 0,
                                  arm_id: 0,
                                  outcome_id: 0)
+    pp = PrimaryPublication.find_by_study_id(study.id)
+    pp.trial_title = trans_yes_no_nd(eligibility_data_row[6])
+    pp.save
     DesignDetailDataPoint.create(design_detail_field_id: design_details_qs[5].id,  ## funding source
                                  value: trans_yes_no_nd(eligibility_data_row[7]),
                                  notes: nil,
@@ -839,15 +856,10 @@ end
 ## Inserts outcome detail data points {{{1
 def insert_outcome_detail_data(study, outcomes_table, comments)
     outcomes_table = outcomes_table[1..-1]
-    p "outcomes table: "
-    p outcomes_table
-    p "=================="
     outcomes = Outcome.find(:all, :order => "id",
                             :conditions => { study_id: study.id, extraction_form_id: 194 })
     outcomes_table.each_with_index do |row, m|
         outcomes.each_with_index do |outcome, n|
-            p row
-            gets
             outcome_detail = OutcomeDetail.find(:first, :conditions => {
                 question: "Primary / Secondary Outcome",
                 extraction_form_id: 194
@@ -1487,7 +1499,6 @@ def build_results(study, doc)
         table = table[1..-1]
         unless table[0][0].blank?
             table.each do |row|
-                p row
                 arm = create_arm_if_needed(row[3], study)
                 unless row[2].blank?
                     outcome = Outcome.create(
@@ -1878,7 +1889,6 @@ def build_results(study, doc)
             #table_headers_lv1 = table[0]
             #table_headers_lv2 = table[1]
             table_data = table[2..-1]
-            p table_data
             table_data.each_with_index do |row, i|
                 if i.even?
                     unless row[4].blank?
@@ -2682,7 +2692,6 @@ def build_results(study, doc)
         table = table[1..-1]
         unless table.blank?
             table.each do |row|
-                p row
                 arm = Arm.find(:first, :conditions =>
                                ["study_id=? AND title LIKE ? AND extraction_form_id=194", "#{study.id}", "%#{row[3]}%"])
                 if arm.blank?
@@ -3025,7 +3034,6 @@ def build_results(study, doc)
             #table_headers_lv1 = table[0]
             #table_headers_lv2 = table[1]
             table_data = table[2..-1]
-            p table_data
             table_data.each_with_index do |row, i|
                 if i.even?
                     unless row[4].blank?
@@ -3529,5 +3537,4 @@ if __FILE__ == $0  ## {{{1
     ### Todo !!!  {{{2
     build_mean_data(study, mean) # !!!
     build_other_results(study, doc) # !!!
-    #insert_adverse_events ???
 end
