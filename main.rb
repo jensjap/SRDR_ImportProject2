@@ -993,7 +993,7 @@ def create_outcome_if_needed(outcome_title, unit, study, outcome_type)
     return outcome
 end
 
-## Cretes arms but only if none with that name can be found for this study {{{1
+## Creates arms but only if none with that name can be found for this study {{{1
 def create_arm_if_needed(arm_title, study)
     arm = Arm.find(:last, :conditions =>
                    ["study_id=? AND title LIKE ? AND extraction_form_id=?",
@@ -1022,6 +1022,70 @@ def find_last_outcome_created(study, outcome_type)
     })
 end
 
+## Attempts to find the outcome by study id, outcome title. Once found will modify the outcome to reflect appropriate {{{1
+## unit and outcome_type. Then returns the outcome
+## low := list of words
+## best_choice = [OUTCOME, score]
+## STUDY STRING STRING STRING -> OUTCOME
+def search_for_outcome(study, title, unit, outcome_type)
+    score = 0
+    best_choice = {best_outcome: Outcome.new, score: 0}
+    outcome1_low = Array.new
+    outcome2_low = Array.new
+
+    outcome1_low = title.downcase.split(" ")
+    outcomes = Outcome.find(:all, :conditions => {
+        study_id: study.id,
+        extraction_form_id: 194
+    })
+    outcomes.each do |outcome|
+        if outcome.title.downcase == title.downcase
+            best_outcome = outcome
+            #p "Outcome chosen: #{best_outcome.title}"
+            #p "By default because the title matched the outcome exactly"
+            best_outcome.units = unit
+            best_outcome.outcome_type = outcome_type
+            best_outcome.save
+            return best_outcome
+        else
+            outcome2_low = outcome.title.downcase.split(" ")
+            outcome2_low.each do |o2|
+                outcome1_low.each do |o1|
+                    if o2 == o1
+                        score = score + 1
+                    end
+                end
+            end
+            if score > best_choice[:score]
+                best_choice = {best_outcome: outcome, score: score}
+            end
+        end
+    end
+    #p "Outcome chosen: #{best_choice[:best_outcome].title}"
+    #p "With a score of: #{best_choice[:score]}"
+    best_outcome = best_choice[:best_outcome]
+    best_outcome.units = unit
+    best_outcome.outcome_type = outcome_type
+    best_outcome.save
+    return best_outcome
+end
+
+## Looks for an outcome subgroup with the same outcome_id and title. If found, returns it. {{{1
+## Else creates one and returns it
+def search_for_outcome_subgroup(outcome_id, title)
+#    outcome_sg = OutcomeSubgroup.find(:first, :conditions => {
+#        outcome_id: outcome_id,
+#        title: title
+#    })
+#    if outcome_sg.blank?
+        outcome_sg = OutcomeSubgroup.create(
+            outcome_id: outcome_id,
+            title: title
+        )
+#    end
+    return outcome_sg
+end
+
 ## Builds the results table {{{1
 def build_results(study, doc)
     main_more_than_two_continuous, main_exactly_two_continuous, main_more_than_two_dichotomous, main_exactly_two_dichotomous,
@@ -1036,18 +1100,20 @@ def build_results(study, doc)
                 unless row[2].blank?  # This is a row with a new outcome
                     ##        create_outcome_if_needed(outcome_title, unit, study, outcome_type)
                     #outcome = create_outcome_if_needed(row[2], row[3], study, "Continuous")
-                    outcome = create_outcome_if_needed(row[2], row[3], study, "Continuous")
+                    #outcome = create_outcome_if_needed(row[2], row[3], study, "Continuous")
+                    outcome = search_for_outcome(study, row[2], row[3], "Continuous")
                     arm = create_arm_if_needed(arm_title=row[4], study)
-                    t = OutcomeTimepoint.create(
+                    t = OutcomeTimepoint.find(:last, :conditions => {
                         outcome_id: outcome.id,
-                        number: "N/A",
-                        time_unit: "N/A"
-                    )
-                    s = OutcomeSubgroup.create(
-                        outcome_id: outcome.id,
-                        title: row[4],
-                        description: ""
-                    )
+                        #number: "N/A",
+                        #time_unit: "N/A"
+                    })
+                    #s = OutcomeSubgroup.create(
+                    #    outcome_id: outcome.id,
+                    #    title: row[4],
+                    #    description: ""
+                    #)
+                    @s = search_for_outcome_subgroup(outcome.id, row[2])
                     outcome_data_entry = OutcomeDataEntry.create(
                         outcome_id: outcome.id,
                         extraction_form_id: 194,
@@ -1057,8 +1123,8 @@ def build_results(study, doc)
                                                                                      extraction_form_id: 194,
                                                                                      timepoint_id: t.id,
                                                                                      study_id: study.id,
-                                                                                     subgroup_id: s.id}).length + 1,
-                        subgroup_id: s.id
+                                                                                     subgroup_id: @s.id}).length + 1,
+                        subgroup_id: @s.id
                     )
                     outcome_measures.each_with_index do |measure, i|
                         om = OutcomeMeasure.create(
@@ -1080,22 +1146,23 @@ def build_results(study, doc)
                     end
                 else
                     ##        find_last_outcome_created(study, outcome_type)
-                    outcome = find_last_outcome_created(study, "Continuous")
+                    #outcome = find_last_outcome_created(study, "Continuous")
+                    outcome = search_for_outcome(study, row[2], row[3], "Continuous")
                     arm = create_arm_if_needed(arm_title=row[4], study)
                     t = OutcomeTimepoint.find(:last, :conditions => {
                         outcome_id: outcome.id,
-                        number: "N/A",
-                        time_unit: "N/A"
+                        #number: "N/A",
+                        #time_unit: "N/A"
                     })
-                    s = OutcomeSubgroup.find(:last, :conditions => {
-                        outcome_id: outcome.id,
-                    })
+                    #s = OutcomeSubgroup.find(:last, :conditions => {
+                    #    outcome_id: outcome.id,
+                    #})
                     outcome_data_entry = OutcomeDataEntry.find(:last, :conditions => {
                         outcome_id: outcome.id,
                         extraction_form_id: 194,
                         timepoint_id: t.id,
                         study_id: study.id,
-                        subgroup_id: s.id
+                        subgroup_id: @s.id
                     })
                     outcome_measures.each_with_index do |measure, i|
                         om = OutcomeMeasure.find(:last, :conditions => {
@@ -1123,8 +1190,9 @@ def build_results(study, doc)
     main_exactly_two_continuous.each do |table|  #{{{2
         table = table[1..-1]
         table.each_with_index do |row, i|
-            @h_unit = row[3] unless row[7].blank?
             if i.even?
+                @h_outcome_title = row[2]
+                @h_unit = row[3]
                 h_exposure = row[4]
                 h_mean = row[5]
                 h_analyzed = row[6]
@@ -1163,26 +1231,28 @@ def build_results(study, doc)
                             is_intention_to_treat: 1
                         )
                     end
-                    outcome = Outcome.create(
-                        study_id: study.id,
-                        title: row[2],
-                        is_primary: 1,
-                        units: @h_unit,
-                        description: "",
-                        notes: "",
-                        outcome_type: "Continuous",
-                        extraction_form_id: 194
-                    )
-                    t = OutcomeTimepoint.create(
+#                    outcome = Outcome.create(
+#                        study_id: study.id,
+#                        title: row[2],
+#                        is_primary: 1,
+#                        units: @h_unit,
+#                        description: "",
+#                        notes: "",
+#                        outcome_type: "Continuous",
+#                        extraction_form_id: 194
+#                    )
+                    outcome = search_for_outcome(study, @h_outcome_title, @h_unit, "Continuous")
+                    t = OutcomeTimepoint.find(:last, :conditions => {
                         outcome_id: outcome.id,
-                        number: "N/A",
-                        time_unit: "N/A"
-                    )
-                    s = OutcomeSubgroup.create(
-                        outcome_id: outcome.id,
-                        title: "All Participants",
-                        description: "All participants involved in the study (Default)"
-                    )
+                        #number: "N/A",
+                        #time_unit: "N/A"
+                    })
+                    #@s = OutcomeSubgroup.create(
+                    #    outcome_id: outcome.id,
+                    #    title: "All Participants",
+                    #    description: "All participants involved in the study (Default)"
+                    #)
+                    @s = search_for_outcome_subgroup(outcome.id, row[2])
                     outcome_data_entry = OutcomeDataEntry.create(
                         outcome_id: outcome.id,
                         extraction_form_id: 194,
@@ -1192,8 +1262,8 @@ def build_results(study, doc)
                                                                                      extraction_form_id: 194,
                                                                                      timepoint_id: t.id,
                                                                                      study_id: study.id,
-                                                                                     subgroup_id: s.id}).length + 1,
-                        subgroup_id: s.id
+                                                                                     subgroup_id: @s.id}).length + 1,
+                        subgroup_id: @s.id
                     )
                     om = OutcomeMeasure.create(
                         outcome_data_entry_id: outcome_data_entry.id,
@@ -1297,7 +1367,7 @@ def build_results(study, doc)
                         extraction_form_id: 194,
                         outcome_id: outcome.id,
                         group_id: t.id,
-                        subgroup_id: s.id,
+                        subgroup_id: @s.id,
                         section: 0
                     )
                     comparison_measure_net_difference = ComparisonMeasure.create(
@@ -1378,27 +1448,28 @@ def build_results(study, doc)
                             is_intention_to_treat: 1
                         )
                     end
-                    outcome = Outcome.find(:last, :conditions => {
-                        study_id: study.id,
-                        outcome_type: "Continuous",
-                        extraction_form_id: 194
-                    })
+#                    outcome = Outcome.find(:last, :conditions => {
+#                        study_id: study.id,
+#                        outcome_type: "Continuous",
+#                        extraction_form_id: 194
+#                    })
+                    outcome = search_for_outcome(study, @h_outcome_title, @h_unit, "Continuous")
                     t = OutcomeTimepoint.find(:last, :conditions => {
                         outcome_id: outcome.id,
-                        number: "N/A",
-                        time_unit: "N/A"
+                        #number: "N/A",
+                        #time_unit: "N/A"
                     })
-                    s = OutcomeSubgroup.find(:last, :conditions => {
-                        outcome_id: outcome.id,
-                        title: "All Participants",
-                        description: "All participants involved in the study (Default)"
-                    })
+                    #s = OutcomeSubgroup.find(:last, :conditions => {
+                    #    outcome_id: outcome.id,
+                    #    title: "All Participants",
+                    #    description: "All participants involved in the study (Default)"
+                    #})
                     outcome_data_entry = OutcomeDataEntry.find(:last, :conditions => {
                         outcome_id: outcome.id,
                         extraction_form_id: 194,
                         timepoint_id: t.id,
                         study_id: study.id,
-                        subgroup_id: s.id
+                        subgroup_id: @s.id
                     })
                     om = OutcomeMeasure.find(:last, :conditions => {
                         outcome_data_entry_id: outcome_data_entry.id,
@@ -1509,26 +1580,30 @@ def build_results(study, doc)
             table.each do |row|
                 arm = create_arm_if_needed(row[3], study)
                 unless row[2].blank?
-                    outcome = Outcome.create(
-                        study_id: study.id,
-                        title: row[2],
-                        is_primary: 1,
-                        units: "",
-                        description: row[3],
-                        notes: "",
-                        outcome_type: "Categorical",
-                        extraction_form_id: 194
-                    )
-                    t = OutcomeTimepoint.create(
+                    @h_outcome_title = row[2]
+                    @h_unit = ""
+#                    outcome = Outcome.create(
+#                        study_id: study.id,
+#                        title: row[2],
+#                        is_primary: 1,
+#                        units: "",
+#                        description: row[3],
+#                        notes: "",
+#                        outcome_type: "Categorical",
+#                        extraction_form_id: 194
+#                    )
+                    outcome = search_for_outcome(study, @h_outcome_title, @h_unit, "Categorical")
+                    t = OutcomeTimepoint.find(:last, :conditions => {
                         outcome_id: outcome.id,
-                        number: "N/A",
-                        time_unit: "N/A"
-                    )
-                    s = OutcomeSubgroup.create(
-                        outcome_id: outcome.id,
-                        title: "All Participants",
-                        description: "All participants involved in the study (Default)"
-                    )
+                        #number: "N/A",
+                        #time_unit: "N/A"
+                    })
+                    #s = OutcomeSubgroup.create(
+                    #    outcome_id: outcome.id,
+                    #    title: "All Participants",
+                    #    description: "All participants involved in the study (Default)"
+                    #)
+                    @s = search_for_outcome_subgroup(outcome.id, row[2])
                     outcome_data_entry = OutcomeDataEntry.create(
                         outcome_id: outcome.id,
                         extraction_form_id: 194,
@@ -1538,8 +1613,8 @@ def build_results(study, doc)
                                                                                      extraction_form_id: 194,
                                                                                      timepoint_id: t.id,
                                                                                      study_id: study.id,
-                                                                                     subgroup_id: s.id}).length + 1,
-                        subgroup_id: s.id
+                                                                                     subgroup_id: @s.id}).length + 1,
+                        subgroup_id: @s.id
                     )
                     om = OutcomeMeasure.create(
                         outcome_data_entry_id: outcome_data_entry.id,
@@ -1676,7 +1751,7 @@ def build_results(study, doc)
                         extraction_form_id: 194,
                         outcome_id: outcome.id,
                         group_id: t.id,
-                        subgroup_id: s.id,
+                        subgroup_id: @s.id,
                         section: 0
                     )
                     comparison_measure_p_between_groups = ComparisonMeasure.create(
@@ -1720,27 +1795,28 @@ def build_results(study, doc)
                         table_cell: nil
                     )
                 else
-                    outcome = Outcome.find(:last, :conditions => {
-                        study_id: study.id,
-                        outcome_type: "Categorical",
-                        extraction_form_id: 194
-                    })
+#                    outcome = Outcome.find(:last, :conditions => {
+#                        study_id: study.id,
+#                        outcome_type: "Categorical",
+#                        extraction_form_id: 194
+#                    })
+                    outcome = search_for_outcome(study, @h_outcome_title, @h_unit, "Categorical")
                     t = OutcomeTimepoint.find(:last, :conditions => {
                         outcome_id: outcome.id,
-                        number: "N/A",
-                        time_unit: "N/A"
+                        #number: "N/A",
+                        #time_unit: "N/A"
                     })
-                    s = OutcomeSubgroup.find(:last, :conditions => {
-                        outcome_id: outcome.id,
-                        title: "All Participants",
-                        description: "All participants involved in the study (Default)"
-                    })
+                    #s = OutcomeSubgroup.find(:last, :conditions => {
+                    #    outcome_id: outcome.id,
+                    #    title: "All Participants",
+                    #    description: "All participants involved in the study (Default)"
+                    #})
                     outcome_data_entry = OutcomeDataEntry.find(:last, :conditions => {
                         outcome_id: outcome.id,
                         extraction_form_id: 194,
                         timepoint_id: t.id,
                         study_id: study.id,
-                        subgroup_id: s.id
+                        subgroup_id: @s.id
                     })
                     om = OutcomeMeasure.find(:first, :conditions => {
                         outcome_data_entry_id: outcome_data_entry.id,
@@ -1844,7 +1920,7 @@ def build_results(study, doc)
                         extraction_form_id: 194,
                         outcome_id: outcome.id,
                         group_id: t.id,
-                        subgroup_id: s.id,
+                        subgroup_id: @s.id,
                         section: 0
                     )
                     comparison_measure_p_between_groups = ComparisonMeasure.create(
@@ -1900,6 +1976,8 @@ def build_results(study, doc)
             table_data.each_with_index do |row, i|
                 if i.even?
                     unless row[4].blank?
+                        @h_outcome_title = row[2]
+                        @h_unit = ""
                         h_exposure = row[3]
                         h_mean = row[4]
                         h_n_event = row[5]
@@ -1914,17 +1992,19 @@ def build_results(study, doc)
 
                         arm = create_arm_if_needed(arm_title=h_exposure, study)
                         ##        create_outcome_if_needed(outcome_title, unit, study, outcome_type)
-                        outcome = create_outcome_if_needed(row[2], "", study, "Categorical")
-                        t = OutcomeTimepoint.create(
+                        #outcome = create_outcome_if_needed(row[2], "", study, "Categorical")
+                        outcome = search_for_outcome(study, @h_outcome_title, @h_unit, "Categorical")
+                        t = OutcomeTimepoint.find(:last, :conditions => {
                             outcome_id: outcome.id,
-                            number: "N/A",
-                            time_unit: "N/A"
-                        )
-                        s = OutcomeSubgroup.create(
-                            outcome_id: outcome.id,
-                            title: "All Participants",
-                            description: "All participants involved in the study (Default)"
-                        )
+                            #number: "N/A",
+                            #time_unit: "N/A"
+                        })
+                        #s = OutcomeSubgroup.create(
+                        #    outcome_id: outcome.id,
+                        #    title: "All Participants",
+                        #    description: "All participants involved in the study (Default)"
+                        #)
+                        @s = search_for_outcome_subgroup(outcome.id, row[2])
                         outcome_data_entry = OutcomeDataEntry.create(
                             outcome_id: outcome.id,
                             extraction_form_id: 194,
@@ -1934,8 +2014,8 @@ def build_results(study, doc)
                                                                                          extraction_form_id: 194,
                                                                                          timepoint_id: t.id,
                                                                                          study_id: study.id,
-                                                                                         subgroup_id: s.id}).length + 1,
-                            subgroup_id: s.id
+                                                                                         subgroup_id: @s.id}).length + 1,
+                            subgroup_id: @s.id
                         )
                         om = OutcomeMeasure.create(
                             outcome_data_entry_id: outcome_data_entry.id,
@@ -1993,7 +2073,7 @@ def build_results(study, doc)
                             extraction_form_id: 194,
                             outcome_id: outcome.id,
                             group_id: t.id,
-                            subgroup_id: s.id,
+                            subgroup_id: @s.id,
                             section: 0
                         )
                         comparison_measure_unadjusted_result = ComparisonMeasure.create(
@@ -2119,23 +2199,24 @@ def build_results(study, doc)
                         h_n_total = row[3]
 
                         arm = create_arm_if_needed(arm_title=h_exposure, study)
-                        outcome = Outcome.find(:last, :conditions => {
-                            study_id: study.id,
-                            outcome_type: "Categorical",
-                            extraction_form_id: 194
-                        })
+#                        outcome = Outcome.find(:last, :conditions => {
+#                            study_id: study.id,
+#                            outcome_type: "Categorical",
+#                            extraction_form_id: 194
+#                        })
+                        outcome = search_for_outcome(study, @h_outcome_title, @h_unit, "Categorical")
                         t = OutcomeTimepoint.find(:last, :conditions => {
                             outcome_id: outcome.id,
                         })
-                        s = OutcomeSubgroup.find(:last, :conditions => {
-                            outcome_id: outcome.id,
-                        })
+                        #s = OutcomeSubgroup.find(:last, :conditions => {
+                        #    outcome_id: outcome.id,
+                        #})
                         outcome_data_entry = OutcomeDataEntry.find(:last, :conditions => {
                             outcome_id: outcome.id,
                             extraction_form_id: 194,
                             timepoint_id: t.id,
                             study_id: study.id,
-                            subgroup_id: s.id
+                            subgroup_id: @s.id
                         })
                         om = OutcomeMeasure.find(:last, :conditions => {
                             outcome_data_entry_id: outcome_data_entry.id,
@@ -2199,18 +2280,20 @@ def build_results(study, doc)
             table.each do |row|
                 unless row[2].blank?  # This is a row with a new outcome
                     ##        create_outcome_if_needed(outcome_title, unit, study, outcome_type)
-                    outcome = create_outcome_if_needed(row[2], row[3], study, "Continuous")
+                    #outcome = create_outcome_if_needed(row[2], row[3], study, "Continuous")
+                    outcome = search_for_outcome(study, row[2], row[3], "Continuous")
                     arm = create_arm_if_needed(arm_title=row[4], study)
-                    t = OutcomeTimepoint.create(
+                    t = OutcomeTimepoint.find(:last, :conditions => {
                         outcome_id: outcome.id,
-                        number: "N/A",
-                        time_unit: "N/A"
-                    )
-                    s = OutcomeSubgroup.create(
-                        outcome_id: outcome.id,
-                        title: row[4],
-                        description: ""
-                    )
+                        #number: "N/A",
+                        #time_unit: "N/A"
+                    })
+                    #@s = OutcomeSubgroup.create(
+                    #    outcome_id: outcome.id,
+                    #    title: row[4],
+                    #    description: ""
+                    #)
+                    @s = search_for_outcome_subgroup(outcome.id, row[2])
                     outcome_data_entry = OutcomeDataEntry.create(
                         outcome_id: outcome.id,
                         extraction_form_id: 194,
@@ -2220,8 +2303,8 @@ def build_results(study, doc)
                                                                                      extraction_form_id: 194,
                                                                                      timepoint_id: t.id,
                                                                                      study_id: study.id,
-                                                                                     subgroup_id: s.id}).length + 1,
-                        subgroup_id: s.id
+                                                                                     subgroup_id: @s.id}).length + 1,
+                        subgroup_id: @s.id
                     )
                     outcome_measures.each_with_index do |measure, i|
                         om = OutcomeMeasure.create(
@@ -2243,22 +2326,23 @@ def build_results(study, doc)
                     end
                 else
                     ##        find_last_outcome_created(study, outcome_type)
-                    outcome = find_last_outcome_created(study, "Continuous")
+                    #outcome = find_last_outcome_created(study, "Continuous")
+                    outcome = search_for_outcome(study, row[2], row[3], "Continuous")
                     arm = create_arm_if_needed(arm_title=row[4], study)
                     t = OutcomeTimepoint.find(:last, :conditions => {
                         outcome_id: outcome.id,
-                        number: "N/A",
-                        time_unit: "N/A"
+                        #number: "N/A",
+                        #time_unit: "N/A"
                     })
-                    s = OutcomeSubgroup.find(:last, :conditions => {
-                        outcome_id: outcome.id,
-                    })
+                    #s = OutcomeSubgroup.find(:last, :conditions => {
+                    #    outcome_id: outcome.id,
+                    #})
                     outcome_data_entry = OutcomeDataEntry.find(:last, :conditions => {
                         outcome_id: outcome.id,
                         extraction_form_id: 194,
                         timepoint_id: t.id,
                         study_id: study.id,
-                        subgroup_id: s.id
+                        subgroup_id: @s.id
                     })
                     outcome_measures.each_with_index do |measure, i|
                         om = OutcomeMeasure.find(:last, :conditions => {
@@ -2286,8 +2370,10 @@ def build_results(study, doc)
     sub_exactly_two_continuous.each do |table|  #{{{2
         table = table[1..-1]
         table.each_with_index do |row, i|
-            @h_unit = row[3] unless row[7].blank?
+            @h_unit = row[3] unless i.odd? #row[7].blank?
             if i.even?
+                h_outcome_title = row[2]
+                h_unit = row[3]
                 h_exposure = row[4]
                 h_mean = row[5]
                 h_analyzed = row[6]
@@ -2326,57 +2412,64 @@ def build_results(study, doc)
                             is_intention_to_treat: 1
                         )
                     end
-                    _outcomes = Outcome.find(:all, :conditions => {
-                        study_id: study.id,
-                        extraction_form_id: 194
-                    })
-                    _outcomes.each do |out|
-                        if row[2].downcase.include?(out.title)
-                            outcome = Outcome.find(:first, :conditions => {
-                                study_id: study.id,
-                                title: out.title,
-                                outcome_type: 'Continuous',
-                                extraction_form_id: 194
-                            })
-                            @s = OutcomeSubgroup.create(
-                                outcome_id: outcome.id,
-                                title: row[2],
-                                description: row[4],
-                            )
-                            break
-                        end
-                    end
-                    begin
-                        p outcome
-                    rescue NameError => e
-                        p e
-                        outcome = Outcome.create(
-                            study_id: study.id,
-                            title: row[2],
-                            is_primary: 1,
-                            units: @h_unit,
-                            description: "",
-                            notes: "",
-                            outcome_type: "Continuous",
-                            extraction_form_id: 194
-                        )
-                        @s = OutcomeSubgroup.create(
-                            outcome_id: outcome.id,
-                            title: "All Participants",
-                            description: "All participants involved in the study (Default)"
-                        )
-                    end
+#                    _outcomes = Outcome.find(:all, :conditions => {
+#                        study_id: study.id,
+#                        extraction_form_id: 194
+#                    })
+#                    _outcomes.each do |out|
+#                        if row[2].downcase.include?(out.title)
+#                            outcome = Outcome.find(:first, :conditions => {
+#                                study_id: study.id,
+#                                title: out.title,
+#                                outcome_type: 'Continuous',
+#                                extraction_form_id: 194
+#                            })
+#                            @s = OutcomeSubgroup.create(
+#                                outcome_id: outcome.id,
+#                                title: row[2],
+#                                description: row[4],
+#                            )
+#                            break
+#                        end
+#                    end
+                    outcome = search_for_outcome(study, h_outcome_title, h_unit, "Continuous")
+#                    begin
+#                        p outcome
+#                    rescue NameError => e
+#                        p e
+#                        outcome = Outcome.create(
+#                            study_id: study.id,
+#                            title: row[2],
+#                            is_primary: 1,
+#                            units: @h_unit,
+#                            description: "",
+#                            notes: "",
+#                            outcome_type: "Continuous",
+#                            extraction_form_id: 194
+#                        )
+#                        @s = OutcomeSubgroup.create(
+#                            outcome_id: outcome.id,
+#                            title: "All Participants",
+#                            description: "All participants involved in the study (Default)"
+#                        )
+#                    end
+                    #@s = OutcomeSubgroup.create(
+                    #    outcome_id: outcome.id,
+                    #    title: "All Participants",
+                    #    description: "All participants involved in the study (Default)"
+                    #)
+                    @s = search_for_outcome_subgroup(outcome.id, h_outcome_title)
                     t = OutcomeTimepoint.find(:first, :conditions => {
                         outcome_id: outcome.id,
-                        number: "N/A",
-                        time_unit: "N/A"
+                        #number: "N/A",
+                        #time_unit: "N/A"
                     })
                     if t.blank?
-                        t = OutcomeTimepoint.create(
+                        t = OutcomeTimepoint.find(:last, :conditions => {
                             outcome_id: outcome.id,
-                            number: "N/A",
-                            time_unit: "N/A"
-                        )
+                            #number: "N/A",
+                            #time_unit: "N/A"
+                        })
                     end
                     outcome_data_entry = OutcomeDataEntry.create(
                         outcome_id: outcome.id,
@@ -2580,14 +2673,14 @@ def build_results(study, doc)
                     })
                     t = OutcomeTimepoint.find(:last, :conditions => {
                         outcome_id: outcome.id,
-                        number: "N/A",
-                        time_unit: "N/A"
+                        #number: "N/A",
+                        #time_unit: "N/A"
                     })
-                    @s = OutcomeSubgroup.find(:last, :conditions => {
-                        outcome_id: outcome.id,
-                        title: "All Participants",
-                        description: "All participants involved in the study (Default)"
-                    })
+                    #@s = OutcomeSubgroup.find(:last, :conditions => {
+                    #    outcome_id: outcome.id,
+                    #    title: "All Participants",
+                    #    description: "All participants involved in the study (Default)"
+                    #})
                     outcome_data_entry = OutcomeDataEntry.find(:last, :conditions => {
                         outcome_id: outcome.id,
                         extraction_form_id: 194,
@@ -2718,49 +2811,58 @@ def build_results(study, doc)
                     )
                 end
                 unless row[2].blank?
-                    _outcomes = Outcome.find(:all, :conditions => {
-                        study_id: study.id,
-                        extraction_form_id: 194
-                    })
-                    _outcomes.each do |out|
-                        if row[2].downcase.include?(out.title)
-                            outcome = Outcome.find(:first, :conditions => {
-                                study_id: study.id,
-                                title: out.title,
-                                is_primary: 1,
-                                outcome_type: "Categorical",
-                                extraction_form_id: 194
-                            })
-                            @s = OutcomeSubgroup.create(
-                                outcome_id: outcome.id,
-                                title: row[2],
-                                description: "All participants involved in the study (Default)"
-                            )
-                            break
-                        end
-                    end
-                    if outcome.blank?
-                        outcome = Outcome.create(
-                            study_id: study.id,
-                            title: row[2],
-                            is_primary: 1,
-                            units: "",
-                            description: row[3],
-                            notes: "",
-                            outcome_type: "Categorical",
-                            extraction_form_id: 194
-                        )
-                        @s = OutcomeSubgroup.create(
-                            outcome_id: outcome.id,
-                            title: row[2],
-                            description: "All participants involved in the study (Default)"
-                        )
-                    end
+                    @h_outcome_title = row[2]
+                    @h_unit = ""
+#                    _outcomes = Outcome.find(:all, :conditions => {
+#                        study_id: study.id,
+#                        extraction_form_id: 194
+#                    })
+#                    _outcomes.each do |out|
+#                        if row[2].downcase.include?(out.title)
+#                            outcome = Outcome.find(:first, :conditions => {
+#                                study_id: study.id,
+#                                title: out.title,
+#                                is_primary: 1,
+#                                outcome_type: "Categorical",
+#                                extraction_form_id: 194
+#                            })
+#                            @s = OutcomeSubgroup.create(
+#                                outcome_id: outcome.id,
+#                                title: row[2],
+#                                description: "All participants involved in the study (Default)"
+#                            )
+#                            break
+#                        end
+#                    end
+#                    if outcome.blank?
+#                        outcome = Outcome.create(
+#                            study_id: study.id,
+#                            title: row[2],
+#                            is_primary: 1,
+#                            units: "",
+#                            description: row[3],
+#                            notes: "",
+#                            outcome_type: "Categorical",
+#                            extraction_form_id: 194
+#                        )
+#                        @s = OutcomeSubgroup.create(
+#                            outcome_id: outcome.id,
+#                            title: row[2],
+#                            description: "All participants involved in the study (Default)"
+#                        )
+#                    end
+                    outcome = search_for_outcome(study, @h_outcome_title, @h_unit, "Categorical")
                     t = OutcomeTimepoint.find(:first, :conditions => {
                         outcome_id: outcome.id,
-                        number: "N/A",
-                        time_unit: "N/A"
+                        #number: "N/A",
+                        #time_unit: "N/A"
                     })
+                    #@s = OutcomeSubgroup.create(
+                    #    outcome_id: outcome.id,
+                    #    title: row[2],
+                    #    description: "All participants involved in the study (Default)"
+                    #)
+                    @s = search_for_outcome_subgroup(outcome.id, row[2])
                     outcome_data_entry = OutcomeDataEntry.create(
                         outcome_id: outcome.id,
                         extraction_form_id: 194,
@@ -2902,21 +3004,22 @@ def build_results(study, doc)
                         footnote_number: 0
                     )
                 else
-                    outcome = Outcome.find(:last, :conditions => {
-                        study_id: study.id,
-                        outcome_type: "Categorical",
-                        extraction_form_id: 194
-                    })
+#                    outcome = Outcome.find(:last, :conditions => {
+#                        study_id: study.id,
+#                        outcome_type: "Categorical",
+#                        extraction_form_id: 194
+#                    })
+                    outcome = search_for_outcome(study, @h_outcome_title, @h_unit, "Categorical")
                     t = OutcomeTimepoint.find(:last, :conditions => {
                         outcome_id: outcome.id,
-                        number: "N/A",
-                        time_unit: "N/A"
+                        #number: "N/A",
+                        #time_unit: "N/A"
                     })
-                    @s = OutcomeSubgroup.find(:last, :conditions => {
-                        outcome_id: outcome.id,
-                        title: "All Participants",
-                        description: "All participants involved in the study (Default)"
-                    })
+                    #@s = OutcomeSubgroup.find(:last, :conditions => {
+                    #    outcome_id: outcome.id,
+                    #    title: "All Participants",
+                    #    description: "All participants involved in the study (Default)"
+                    #})
                     outcome_data_entry = OutcomeDataEntry.find(:last, :conditions => {
                         outcome_id: outcome.id,
                         extraction_form_id: 194,
@@ -3045,6 +3148,8 @@ def build_results(study, doc)
             table_data.each_with_index do |row, i|
                 if i.even?
                     unless row[4].blank?
+                        @h_outcome_title = row[2]
+                        @h_unit = ""
                         h_exposure = row[3]
                         h_mean = row[4]
                         h_n_event = row[5]
@@ -3059,17 +3164,19 @@ def build_results(study, doc)
 
                         arm = create_arm_if_needed(arm_title=h_exposure, study)
                         ##        create_outcome_if_needed(outcome_title, unit, study, outcome_type")
-                        outcome = create_outcome_if_needed(row[2], "", study, "Categorical")
-                        t = OutcomeTimepoint.create(
+                        #outcome = create_outcome_if_needed(row[2], "", study, "Categorical")
+                        outcome = search_for_outcome(study, @h_outcome_title, @h_unit, "Categorical")
+                        t = OutcomeTimepoint.find(:last, :conditions => {
                             outcome_id: outcome.id,
-                            number: "N/A",
-                            time_unit: "N/A"
-                        )
-                        @s = OutcomeSubgroup.create(
-                            outcome_id: outcome.id,
-                            title: "All Participants",
-                            description: "All participants involved in the study (Default)"
-                        )
+                            #number: "N/A",
+                            #time_unit: "N/A"
+                        })
+                        #@s = OutcomeSubgroup.create(
+                        #    outcome_id: outcome.id,
+                        #    title: "All Participants",
+                        #    description: "All participants involved in the study (Default)"
+                        #)
+                        @s = search_for_outcome_subgroup(outcome.id, row[2])
                         outcome_data_entry = OutcomeDataEntry.create(
                             outcome_id: outcome.id,
                             extraction_form_id: 194,
@@ -3264,17 +3371,18 @@ def build_results(study, doc)
                         h_n_total = row[3]
 
                         arm = create_arm_if_needed(arm_title=h_exposure, study)
-                        outcome = Outcome.find(:last, :conditions => {
-                            study_id: study.id,
-                            outcome_type: "Categorical",
-                            extraction_form_id: 194
-                        })
+#                        outcome = Outcome.find(:last, :conditions => {
+#                            study_id: study.id,
+#                            outcome_type: "Categorical",
+#                            extraction_form_id: 194
+#                        })
+                        outcome = search_for_outcome(study, @h_outcome_title, @h_unit, "Categorical")
                         t = OutcomeTimepoint.find(:last, :conditions => {
                             outcome_id: outcome.id,
                         })
-                        @s = OutcomeSubgroup.find(:last, :conditions => {
-                            outcome_id: outcome.id,
-                        })
+                        #@s = OutcomeSubgroup.find(:last, :conditions => {
+                        #    outcome_id: outcome.id,
+                        #})
                         outcome_data_entry = OutcomeDataEntry.find(:last, :conditions => {
                             outcome_id: outcome.id,
                             extraction_form_id: 194,
@@ -3553,7 +3661,7 @@ if __FILE__ == $0  ## {{{1
     insert_outcome_detail_data(study, outcomes, comments)
 
     ### Todo !!!
-    #build_results(study, doc)  # !!!
+    build_results(study, doc)  # !!!
 
     insert_confounders_info(study, confounders)  ## This is done actually
 
