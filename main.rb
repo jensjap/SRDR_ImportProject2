@@ -49,6 +49,148 @@ def parse_html_file(file)
     Nokogiri::HTML(f)
 end
 
+## Another attempt at getting the table data {{{1
+def get_table_v2(doc)
+    my_tables = Array.new
+    elig = Array.new
+    pop = Array.new
+    back = Array.new
+    inter = Array.new
+    outcomes = Array.new
+    mean = Array.new
+    other = Array.new
+    qis = Array.new
+    qoc = Array.new
+    comments = Array.new
+    comments_w_results = Array.new
+    conf = Array.new
+
+    tables = doc.xpath("//table")
+    tables.each do |table|
+        a = split_table_data(table)
+        if a[0][2].include?("Study") && a[0][2].include?("Design") &&
+           a[0][3].include?("Inclusion") &&
+           a[0][4].include?("Exclusion") &&
+           a[0][5].include?("Enrollment") && a[0][5].include?("Years") &&
+           a[0][6].include?("Trial") && a[0][6].include?("or") && a[0][6].include?("Cohort") && a[0][6].include?("Name") &&
+           a[0][7].include?("Funding") && a[0][7].include?("Source") &&
+           a[0][8].include?("Extractor")
+            ## Eligibility
+            elig = a
+            #my_tables << a
+        elsif a[0][2].include?("Study") && a[0][2].include?("Design") &&
+           a[0][3].include?("Location") && a[0][3].include?("City") && a[0][3].include?("Country") && a[0][3].include?("latitude") &&
+           a[0][4].include?("N") && a[0][4].include?("enrolled") &&
+           a[0][5].include?("N") && a[0][5].include?("analyzed") &&
+           a[0][6].include?("Mean") && a[0][6].include?("Age") && a[0][6].include?("yr") &&
+           a[0][7].include?("Age") && a[0][7].include?("Range") && a[0][7].include?("IQR") &&
+           a[0][8].include?("Male") && a[0][8].include?("%") &&
+           a[0][9].include?("Race") && a[0][9].include?("Ethnicity") &&
+           a[0][10].include?("Anthropometry") && a[0][10].include?("data") && a[0][10].include?("BMI") && a[0][10].include?("weight") &&
+           a[0][11].include?("Health") && a[0][11].include?("Status") &&
+           a[0][12].include?("Specific") && a[0][12].include?("Nutrition") && a[0][12].include?("Status") && a[0][12].include?("Data") &&
+            ## Population Baseline
+            pop = a
+            #my_tables << a
+        elsif a[0][2].include?("Exposure") &&
+           a[0][3].include?("Dietary") && a[0][3].include?("Assessment") && a[0][3].include?("Method") &&
+           a[0][4].include?("Food") && a[0][4].include?("Composition") && a[0][4].include?("Database") &&
+           a[0][5].include?("Internal") && a[0][5].include?("Calibration") && a[0][5].include?("Validity") && a[0][5].include?("Dietary") && a[0][5].include?("Assessment") && a[0][5].include?("Provide") && a[0][5].include?("Data") &&
+           a[0][6].include?("Biomarker") && a[0][6].include?("Assay") &&
+           a[0][7].include?("Analytical") && a[0][7].include?("Validity") && a[0][7].include?("Biomarker") && a[0][7].include?("Data") && a[0][7].include?("Reported") && a[0][7].include?("Provide") && a[0][7].include?("Data") &&
+           a[0][8].include?("Time") && a[0][8].include?("between") && a[0][8].include?("Biomarker") && a[0][8].include?("Sampling") && a[0][8].include?("Analysis") &&
+           a[0][9].include?("Season") && a[0][9].include?("Date") && a[0][9].include?("when") && a[0][9].include?("the") && a[0][9].include?("biomarker") && a[0][9].include?("samples") && a[0][9].include?("drawn") &&
+           a[0][10].include?("Background") && a[0][10].include?("exposure") && a[0][10].include?("data") &&
+            ## Background Diet
+            back = a
+            #my_tables << a
+        elsif a[0][2].include?("Vit") && a[0][2].include?("D") && a[0][2].include?("Ca") && a[0][2].include?("Intervention") &&
+           a[0][3].include?("Source") && a[0][3].include?("brand") && a[0][3].include?("name") && a[0][3].include?("foods") && a[0][3].include?("formulation") &&
+           a[0][4].include?("Vit") && a[0][4].include?("D") && a[0][4].include?("Ca") && a[0][4].include?("Dose") &&
+           a[0][5].include?("Intervention") && a[0][5].include?("Duration") &&
+           a[0][6].include?("Intervention") && a[0][6].include?("Frequency") && a[0][6].include?("capsules") && a[0][6].include?("taken") && a[0][6].include?("times") && a[0][6].include?("a") && a[0][6].include?("day") &&
+            ## Interventions
+            inter = a
+            #my_tables << a
+        elsif a[0][2].include?("Primary") && a[0][2].include?("Secondary") && a[0][2].include?("Outcome") &&
+           a[0][3].include?("Outcome") &&
+           a[0][4].include?("Definition") &&
+            ## List of all outcomes
+            outcomes = a
+            #my_tables << a
+        elsif a[0][2].include?("Outcome") && a[0][2].include?("Group") &&
+           a[0][3].include?("Time") && a[0][3].include?("between") && a[0][3].include?("Baseline") && a[0][3].include?("Exposure") && a[0][3].include?("Outcome") && a[0][3].include?("Assessments") &&
+           a[0][4].include?("Crude") && a[0][4].include?("Adjusted") && a[0][4].include?("analysis") &&
+           a[0][5].include?("No") && a[0][5].include?("Analyzed") &&
+           a[0][6].include?("Mean") && a[0][6].include?("25(OH)D") && a[0][6].include?("Level") &&
+           a[0][7].include?("Vit") && a[0][7].include?("D") && a[0][7].include?("level") && a[0][7].include?("CI") && a[0][7].include?("SE") && a[0][7].include?("SD") &&
+           a[0][8].include?("Mean") && a[0][8].include?("Ca") && a[0][8].include?("intake") && a[0][8].include?("Ca") && a[0][8].include?("balance") &&
+           a[0][9].include?("Ca") && a[0][9].include?("CI") && a[0][9].include?("SE") && a[0][9].include?("SD") &&
+           a[0][10].include?("P") && a[0][10].include?("between") && a[0][10].include?("groups") &&
+            ## Mean data
+            mean = a
+            #my_tables << a
+        elsif a[0][2].include?("Outcome") &&
+           a[0][3].include?("Results") &&
+            ## Other results
+            other = a
+            #my_tables << a
+        elsif a[0][2].include?("Design") &&
+           a[0][3].include?("Appropriate") && a[0][3].include?("Randomization") && a[0][3].include?("Technique") &&
+           a[0][4].include?("Allocation") && a[0][4].include?("Concealment") &&
+           a[0][5].include?("Appropriate") && a[0][5].include?("Washout") && a[0][5].include?("Period") &&
+           a[0][6].include?("Dropout") && a[0][6].include?("Rate") &&
+           a[0][7].include?("Blinded") && a[0][7].include?("Outcome") && a[0][7].include?("Assessment") &&
+           a[0][8].include?("Intention") && a[0][8].include?("to") && a[0][8].include?("Treat") && a[0][8].include?("Analysis") &&
+           a[0][9].include?("Appropriate") && a[0][9].include?("Statistical") && a[0][9].include?("Analysis") &&
+           a[0][10].include?("Assessment") && a[0][10].include?("for") && a[0][10].include?("Confounding") &&
+           a[0][11].include?("Clear") && a[0][11].include?("Reporting") && a[0][11].include?("with") && a[0][11].include?("No") && a[0][11].include?("Discrepancies") &&
+           a[0][12].include?("OVERALL") && a[0][12].include?("Grade") &&
+            ## Quality of Interventional Studies
+            qis = a
+            #my_tables << a
+        elsif a[0][2].include?("Population") &&
+           a[0][3].include?("Exposure") && a[0][3].include?("All") &&
+           a[0][4].include?("Dietary") && a[0][4].include?("assessment") &&
+           a[0][5].include?("Biomarkers") &&
+           a[0][6].include?("Comparator") &&
+           a[0][7].include?("Statistical") && a[0][7].include?("Analysis") &&
+           a[0][8].include?("Outcome") &&
+           a[0][9].include?("Design") &&
+            ## Quality of Cohort or Nested case-control studies
+            qoc = a
+            #my_tables << a
+        elsif a[0][2].include?("Comments") && a[0][2].exclude?("Results") &&
+            ## Comments
+            comments = a
+            #my_tables << a
+        elsif a[0][2].include?("Comments") && a[0][2].include?("Results") &&
+            ## Comments for Results
+            comments_w_results = a
+            #my_tables << a
+        elsif a[0][2].include?("Confounder") && a[0][2].include?("Groups") &&
+           a[0][3].include?("Confounder") &&
+           a[0][4].include?("confounders") &&
+            ## Confounders
+            conf = a
+            #my_tables << a
+        end
+    end
+    my_tables << elig
+    my_tables << pop
+    my_tables << back
+    my_tables << inter
+    my_tables << outcomes
+    my_tables << mean
+    my_tables << other
+    my_tables << qis
+    my_tables << qoc
+    my_tables << comments
+    my_tables << comments_w_results
+    my_tables << conf
+    return my_tables
+end
+
 ## Sorts a nokogiri document into tables and appends them to an array {{{1
 def get_table_data(doc)
     tables = Array.new
@@ -3671,9 +3813,10 @@ end
 
 
 if __FILE__ == $0  ## {{{1
-    begin
+    #begin
         key_question_id_list = [356, 357, 358, 359, 360]
-        table_array = Array.new
+        table_array1 = Array.new
+        table_array2 = Array.new
         pmids = Array.new
     
         validate_arg_list(opts)
@@ -3683,24 +3826,25 @@ if __FILE__ == $0  ## {{{1
         load_rails_environment
     
         doc = parse_html_file(opts[:file])
-        table_array = get_table_data(doc)
+        #table_array1 = get_table_data(doc)
+        table_array2 = get_table_v2(doc)
     
-        eligibility                  = table_array[0]  # ELIGIBILITY CRITERIA AND OTHER CHARACTERISTICS
-        population                   = table_array[1]  # POPULATION (BASELINE)
-        background                   = table_array[2]  # Background Diet
-        intervention                 = table_array[3]  # INTERVENTION(S), SKIP IF OBSERVATIONAL STUDY
-        outcomes                     = table_array[4]  # LIST OF ALL OUTCOMES
-        #two_dichotomous              = table_array[5]  # 2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
-        #two_continuous               = table_array[6]  # 2 ARMS/GROUPS: CONTINUOUS OUTCOMES
-        #more_than_two_dichotomous    = table_array[7]  # ≥2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
-        #more_than_two_continuous     = table_array[8]  # ≥2 ARMS/GROUPS: CONTINUOUS OUTCOMES
-        mean                         = table_array[5]  # MEAN DATA
-        other_results                = table_array[6]  # OTHER RESULTS
-        quality_interventional       = table_array[7]  # QUALITY of INTERVENTIONAL STUDIES
-        quality_case_control_studies = table_array[8]  # QUALITY of COHORT OR NESTED CASE-CONTROL STUDIES
-        comments                     = table_array[9]  # Comments
-        comments_results             = table_array[10]  # Comments for Results
-        confounders                  = table_array[11]  # Confounders
+        eligibility                  = table_array2[0]  # ELIGIBILITY CRITERIA AND OTHER CHARACTERISTICS
+        population                   = table_array2[1]  # POPULATION (BASELINE)
+        background                   = table_array2[2]  # Background Diet
+        intervention                 = table_array2[3]  # INTERVENTION(S), SKIP IF OBSERVATIONAL STUDY
+        outcomes                     = table_array2[4]  # LIST OF ALL OUTCOMES
+        #two_dichotomous              = table_array2[5]  # 2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
+        #two_continuous               = table_array2[6]  # 2 ARMS/GROUPS: CONTINUOUS OUTCOMES
+        #more_than_two_dichotomous    = table_array2[7]  # ≥2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
+        #more_than_two_continuous     = table_array2[8]  # ≥2 ARMS/GROUPS: CONTINUOUS OUTCOMES
+        mean                         = table_array2[5]  # MEAN DATA
+        other_results                = table_array2[6]  # OTHER RESULTS
+        quality_interventional       = table_array2[7]  # QUALITY of INTERVENTIONAL STUDIES
+        quality_case_control_studies = table_array2[8]  # QUALITY of COHORT OR NESTED CASE-CONTROL STUDIES
+        comments                     = table_array2[9]  # Comments
+        comments_results             = table_array2[10]  # Comments for Results
+        confounders                  = table_array2[11]  # Confounders
     
         ## Each study for this project has the pubmed ID recorded in almost every table under the
         ## `UI' heading. For the sake of simplicity and consistency we will retrieve the pmid from the
@@ -3773,10 +3917,10 @@ if __FILE__ == $0  ## {{{1
     
         build_mean_data(study, mean) # !!!
         build_other_results(study, doc) # !!!
-    rescue Exception => e
-        p e
-        File.open("fatal_errors.txt",'a') do |filea|
-           filea.puts p opts[:file]
-        end
-    end
+    #rescue Exception => e
+    #    p e
+    #    File.open("fatal_errors.txt",'a') do |filea|
+    #       filea.puts p opts[:file]
+    #    end
+    #end
 end
