@@ -493,13 +493,23 @@ def add_quality_dimension_data_points_qoi(quality_interventional, study)
         study_id: study.id,
         field_type: nil,
         extraction_form_id: 190)
-    QualityDimensionDataPoint.create(
-        quality_dimension_field_id: fields[10].id,  ## adverse events
-        value: trans_yes_no_nd(adverse_event_value),
-        notes: "",
-        study_id: study.id,
-        field_type: nil,
-        extraction_form_id: 190)
+    if trans_yes_no_nd(adverse_event_value).length > 250
+        QualityDimensionDataPoint.create(
+            quality_dimension_field_id: fields[10].id,  ## adverse events
+            value: "Too long. Please see notes section.",
+            notes: trans_yes_no_nd(adverse_event_value),
+            study_id: study.id,
+            field_type: nil,
+            extraction_form_id: 190)
+    else 
+        QualityDimensionDataPoint.create(
+            quality_dimension_field_id: fields[10].id,  ## adverse events
+            value: trans_yes_no_nd(adverse_event_value),
+            notes: "",
+            study_id: study.id,
+            field_type: nil,
+            extraction_form_id: 190)
+    end
 #    QualityDimensionDataPoint.create(
 #        quality_dimension_field_id: fields[11].id,  ## overall grade
 #        value: row[12],
@@ -3826,25 +3836,25 @@ if __FILE__ == $0  ## {{{1
         load_rails_environment
     
         doc = parse_html_file(opts[:file])
-        #table_array1 = get_table_data(doc)
-        table_array2 = get_table_v2(doc)
+        table_array = get_table_data(doc)
+        #table_array = get_table_v2(doc)
     
-        eligibility                  = table_array2[0]  # ELIGIBILITY CRITERIA AND OTHER CHARACTERISTICS
-        population                   = table_array2[1]  # POPULATION (BASELINE)
-        background                   = table_array2[2]  # Background Diet
-        intervention                 = table_array2[3]  # INTERVENTION(S), SKIP IF OBSERVATIONAL STUDY
-        outcomes                     = table_array2[4]  # LIST OF ALL OUTCOMES
-        #two_dichotomous              = table_array2[5]  # 2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
-        #two_continuous               = table_array2[6]  # 2 ARMS/GROUPS: CONTINUOUS OUTCOMES
-        #more_than_two_dichotomous    = table_array2[7]  # ≥2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
-        #more_than_two_continuous     = table_array2[8]  # ≥2 ARMS/GROUPS: CONTINUOUS OUTCOMES
-        mean                         = table_array2[5]  # MEAN DATA
-        other_results                = table_array2[6]  # OTHER RESULTS
-        quality_interventional       = table_array2[7]  # QUALITY of INTERVENTIONAL STUDIES
-        quality_case_control_studies = table_array2[8]  # QUALITY of COHORT OR NESTED CASE-CONTROL STUDIES
-        comments                     = table_array2[9]  # Comments
-        comments_results             = table_array2[10]  # Comments for Results
-        confounders                  = table_array2[11]  # Confounders
+        eligibility                  = table_array[0]  # ELIGIBILITY CRITERIA AND OTHER CHARACTERISTICS
+        population                   = table_array[1]  # POPULATION (BASELINE)
+        background                   = table_array[2]  # Background Diet
+        intervention                 = table_array[3]  # INTERVENTION(S), SKIP IF OBSERVATIONAL STUDY
+        outcomes                     = table_array[4]  # LIST OF ALL OUTCOMES
+        #two_dichotomous              = table_array[5]  # 2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
+        #two_continuous               = table_array[6]  # 2 ARMS/GROUPS: CONTINUOUS OUTCOMES
+        #more_than_two_dichotomous    = table_array[7]  # ≥2 ARMS/GROUPS: DICHOTOMOUS OUTCOMES
+        #more_than_two_continuous     = table_array[8]  # ≥2 ARMS/GROUPS: CONTINUOUS OUTCOMES
+        mean                         = table_array[5]  # MEAN DATA
+        other_results                = table_array[6]  # OTHER RESULTS
+        quality_interventional       = table_array[7]  # QUALITY of INTERVENTIONAL STUDIES
+        quality_case_control_studies = table_array[8]  # QUALITY of COHORT OR NESTED CASE-CONTROL STUDIES
+        comments                     = table_array[9]  # Comments
+        comments_results             = table_array[10]  # Comments for Results
+        confounders                  = table_array[11]  # Confounders
     
         ## Each study for this project has the pubmed ID recorded in almost every table under the
         ## `UI' heading. For the sake of simplicity and consistency we will retrieve the pmid from the
